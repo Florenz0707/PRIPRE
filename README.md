@@ -4,13 +4,15 @@
 
 ## 当前功能
 
-- FastAPI 后端及 `/api/health` 健康接口。
-- Vue 3 + TypeScript 前端，展示连接状态、错误重试和研究流程。
-- 数据、特征、概率模型、回测模块边界。
-- Python/前端测试、格式化、lint、严格类型检查及统一质量检查入口。
-- Docker Compose 双服务部署，Nginx 提供静态资源并代理 `/api/`。
+- 配置化 BTC/Binance 接入；品种与来源通过独立接口注册。
+- 有预算上限的历史数据采集、分钟归档校验、成交级精确标签和压缩回放数据。
+- 历史路径基准、波动条件模型、独立单调校准及三段滚动回测。
+- 每秒更新的完整概率热力图，最多 50 个客户端共享计算结果。
+- 可靠性曲线、三模型比较、波动阶段/价格距离/时间窗误差及全周期行情面板。
+- 数据中断、过期、预热、超出训练分布和计算超时的明确状态。
+- uv/pnpm 锁定依赖、全量质量检查和 Docker Compose 部署。
 
-当前为 `0.1.0` 框架版本，尚未接入行情、模型、概率矩阵或真实回测。健康接口仅说明 API 可响应，不代表数据或模型就绪。
+行情采集必须显式启用。本地尚无至少 10 个日期的成交样本时，不生成有效概率；报告覆盖与实际验证结果以研究报告为准。健康接口只表示 API 可响应。
 
 ## 开发环境
 
@@ -30,7 +32,8 @@ pre-commit install
 
 ```bash
 # 后端：http://127.0.0.1:8000，接口文档：http://127.0.0.1:8000/docs
-uv run --locked uvicorn pripre.api:app --reload --host 127.0.0.1 --port 8000
+# 先完成下方 collect；显式启用真实行情
+PRIPRE_CONFIG=config/default.toml PRIPRE_LIVE_ENABLED=true uv run --locked uvicorn pripre.api:app --reload --host 127.0.0.1 --port 8000
 ```
 
 ```bash
@@ -63,10 +66,10 @@ hooks 使用 uv/pnpm 锁定的本地工具，覆盖 Ruff、mypy、ESLint、vue-t
 ```text
 backend/src/pripre/
   api.py           HTTP 应用边界
-  data/            成交接入与质量检查（待实现）
-  features/        市场状态特征（待实现）
-  models/          共享概率估计引擎（待实现）
-  backtesting/     回放、标签与校准（待实现）
+  data/            成交接入、预算、存储与质量检查
+  features/        市场状态与全周期行情上下文
+  models/          历史路径、条件模型与校准
+  backtesting/     回放、精确标签、滚动回测与指标
 backend/tests/     后端测试
 frontend/          Vue 页面与前端测试
 scripts/check.py   统一质量检查入口
@@ -74,7 +77,7 @@ deploy/            Dockerfile 与 Nginx 配置
 compose.yaml       部署入口
 ```
 
-框架仅安装实际需要的依赖。NumPy、Polars、SciPy、DuckDB、ECharts 等研究与可视化依赖在对应功能实现时通过 uv/pnpm 添加，不在当前版本引入空服务。
+当前计算使用 NumPy，图表使用 ECharts，数据保存为 NPZ；预测日志使用 Python 标准库 SQLite。无需 PostgreSQL、Redis 或其他额外服务。
 
 ## 部署与后续工作
 
@@ -120,3 +123,16 @@ uv run --locked python -m pripre.cli backtest --config config/default.toml
 校准使用带先验收缩的分箱单调回归，只在独立校准集上拟合。报告同时保留三种模型的分数、低/中/高波动分组和超出训练分布的次数，不预设主模型或校准必然更好。超过训练最大波动三倍的状态标为超出分布；回测仍报告该阶段误差，实时展示暂停有效矩阵。
 
 实时引擎与回测调用同一个估计器。引擎从本地已完成样本训练，前 80% 日期提供路径，后 20% 日期校准；默认 512 条抽样路径、固定随机种子。新增数据后重建引擎，模型不会自行联网下载。
+
+## 实时展示与接口
+
+先执行 `collect` 和 `backtest`，再以 `PRIPRE_LIVE_ENABLED=true` 启动 API。实时流需要 60 秒连续成交预热；断流或序号缺口后重新预热。默认配置下每秒生成 21 × 35 矩阵，50 个 WebSocket 订阅共享一个计算循环。每个客户端只保留最新帧，慢客户端不会积压队列。
+
+- `/api/config`：当前有效配置。
+- `/api/matrix`：当前快照；异常状态下 `probabilities` 为 `null`。
+- `/api/stream`：每秒推送快照，超过 50 个连接时关闭新增连接。
+- `/api/research`：最近一次回测报告；尚未生成时返回 404。
+
+前端在停止接收推送 3.5 秒后清除矩阵并提示过期。研究页面可切换三种模型，筛选行情图的日期，并查看校准、误差分组与滚动区间。行情日期筛选不改变上方完整测试集指标。
+
+有效预测的时间、参考价、固定网格、模型、概率和数据状态压缩写入 `data/live/predictions.sqlite`，最多保留最近 3600 条，避免无界增长。这是本地审计记录，不代表已完成这些预测的未来实盘校准。

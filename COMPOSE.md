@@ -5,7 +5,8 @@
 - `backend`：Python 3.12 + uv 构建的 FastAPI 服务，容器内端口 8000，以非 root 用户运行。
 - `frontend`：Node.js 24 + pnpm 构建 Vue 静态资源，由 Nginx 提供页面并代理 `/api/`；代理保留 WebSocket 升级能力。
 - 后端仅在 Compose 网络内可访问；宿主机默认仅发布 `127.0.0.1:8080`。
-- 当前版本没有数据库依赖，也没有持久化业务数据，因此不创建数据库容器或数据卷。
+- 本地 `data/` 挂载到 `/app/data`，保存分钟上下文、成交样本、回测报告及 SQLite 预测日志；不需要额外数据库服务。
+- 后端默认以 UID/GID 1000 运行，可按宿主机目录所有者调整，不以 root 写入研究数据。
 
 镜像中 Python 使用 `uv sync --locked --no-dev --no-editable`，前端使用 `pnpm install --frozen-lockfile`。部署构建与开发环境共用锁文件。镜像基础版本在 Dockerfile 中指定，发布前应重新构建并验证。
 
@@ -14,7 +15,9 @@
 需要可访问的 Docker daemon、Docker Compose 插件，以及拉取镜像和下载依赖的网络。以下命令在包含 `compose.yaml` 的已验收 checkout 中执行，例如 `/tmp/pripre-agent-worktree` 的 `idle` 分支。
 
 ```bash
+mkdir -p data
 cp .env.example .env
+# 用 id -u、id -g 检查当前用户，将 .env 的 UID/GID 改为相同值
 # 按需编辑 .env 中的绑定地址与端口
 # .env 包含部署参数，不提交 Git
 docker compose config --quiet
@@ -39,7 +42,7 @@ curl --fail http://127.0.0.1:8080/
 docker compose logs --tail=100 backend frontend
 ```
 
-健康接口应返回 `status: ok`、`service: pripre-api`、`stage: scaffold`；首页显示研究流程和后端连接状态。健康检查不代表行情新鲜度或模型可用性。`docker compose config` 通过仅代表配置有效，不能代替镜像构建和运行验证。
+健康接口应返回 `status: ok`、`service: pripre-api`、`stage: research`；首页显示实时状态和研究入口。健康检查不代表行情新鲜度或模型可用性。`docker compose config` 通过仅代表配置有效，不能代替镜像构建和运行验证。
 
 更新代码后重建：
 
@@ -62,3 +65,18 @@ docker compose down
 Linux 容器访问宿主机 PostgreSQL 时，可在实际需要的服务中配置 `host.docker.internal:host-gateway` 映射，再通过环境变量提供连接信息。宿主机 PostgreSQL 的监听地址、`pg_hba.conf` 和网络访问规则需结合实际部署单独配置；容器中的 `localhost` 指向容器自身，不能用于访问宿主机数据库。当前代码尚未实现数据库连接，不能仅通过添加连接变量启用。
 
 如后续需要 Redis、消息队列等其他中间件，必须添加为 Compose 服务，配置健康检查、持久化及必要的备份策略，不要求宿主机手动安装。
+
+## 研究数据与实时开关
+
+`.env` 的额外参数：`PRIPRE_DATA_DIR`（默认 `./data`，必须已存在）、`PRIPRE_UID`/`PRIPRE_GID`（默认 1000）、`PRIPRE_LIVE_ENABLED`（默认 false）。实时开关显式为 true 才会连接 Binance；数据目录须对后端运行用户可读写。
+
+可在宿主机按 README 采集，也可使用构建后的镜像：
+
+```bash
+docker compose run --rm backend /app/.venv/bin/python -m pripre.cli collect --config config/default.toml
+docker compose run --rm backend /app/.venv/bin/python -m pripre.cli backtest --config config/default.toml
+```
+
+完成本地数据准备后，将 `.env` 中 `PRIPRE_LIVE_ENABLED` 改为 `true`，执行 `docker compose up -d --wait`。模型从当前本地样本训练；新增样本后重启后端以重建模型。WebSocket 使用同一入口 `/api/stream`，无需另开端口。
+
+备份时保存整个宿主机数据目录。复制 SQLite 日志前先停止后端，避免复制正在写入的文件；原始成交样本和分钟分区通过临时文件原子替换写入。恢复时将备份放回数据目录并确认 UID/GID 权限，再启动服务。`docker compose down` 不删除宿主机数据，不手工清理研究目录作为部署步骤。

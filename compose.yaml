@@ -3,6 +3,16 @@ services:
     build:
       context: .
       dockerfile: deploy/backend.Dockerfile
+    environment:
+      PRIPRE_CONFIG: /app/config/default.toml
+      PRIPRE_LIVE_ENABLED: '${PRIPRE_LIVE_ENABLED:-false}'
+    user: '${PRIPRE_UID:-1000}:${PRIPRE_GID:-1000}'
+    volumes:
+      - type: bind
+        source: '${PRIPRE_DATA_DIR:-./data}'
+        target: /app/data
+        bind:
+          create_host_path: false
     init: true
     restart: unless-stopped
     healthcheck:
