@@ -81,3 +81,11 @@ compose.yaml       部署入口
 部署、端口设置、运行验证和中间件约束见 [COMPOSE.md](COMPOSE.md)。变更记录见 [CHANGE.md](CHANGE.md)。
 
 后续按 `TASK.md` 执行：固定事件口径 → 数据链路 → 基准回测 → 主模型 → 实时矩阵与研究面板 → 全周期验收。
+
+## 阶段 1：事件与扩展接口
+
+`config/default.toml` 提供 BTC/Binance、价格网格、历史范围、下载预算及最多 50 个客户端的默认配置。Python 调用 `load_config(path)` 加载并校验，未知键和无效组合会报错。
+
+品种通过 `Instrument` 描述，来源通过 `MarketSource` 接口与 `SourceRegistry` 注册；新适配器无需修改网格与标签模块。报价源必须显式声明能力，不能替代成交证据。
+
+`touch_labels` 使用冻结网格和真实成交判定；完整但无成交记为未触达，缺失数据下未观察到的事件记为未知，已观察到的触达仍可确认。

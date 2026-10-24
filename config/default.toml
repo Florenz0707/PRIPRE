@@ -1,0 +1,33 @@
+[grid]
+first_window_seconds = 5
+half_width = 10
+horizon_seconds = 180
+price_step = "100"
+window_seconds = 5
+
+[history]
+data_dir = "data"
+max_download_mb = 256
+max_requests = 5000
+# Omitted end means the execution date (UTC).
+# Full date-range context + daily rotating intraday samples for exact touch labels.
+sample_seconds = 420
+start = 2026-01-01
+
+[instrument]
+base = "BTC"
+id = "BTC_USDT"
+quote = "USDT"
+tick_size = "0.01"
+
+[runtime]
+live_enabled = false
+max_clients = 50
+paths = 512
+seed = 2026
+stale_seconds = 5
+update_seconds = 1
+
+[source]
+provider = "binance"
+symbol = "BTCUSDT"
