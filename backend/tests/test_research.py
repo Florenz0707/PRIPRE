@@ -28,7 +28,7 @@ def test_empirical_paths_count_any_trade_without_filling_jumps() -> None:
 def test_chronological_folds_never_train_on_test_dates() -> None:
     days = [f"2026-01-{i:02d}" for i in range(1, 21)]
     splits = folds(days)
-    assert len(splits) == 3
+    assert len(splits) == 1
     assert [day for _, test in splits for day in test] == days[10:]
     for train, test in splits:
         assert max(train) < min(test)

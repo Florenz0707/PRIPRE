@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import re
+import time
 from collections.abc import AsyncIterator
 from decimal import Decimal
 from typing import Protocol
@@ -34,6 +36,12 @@ def timestamp_us(value: int) -> int:
     return value if value >= 100_000_000_000_000 else value * 1000
 
 
+def require_symbol(symbol: str) -> str:
+    if re.fullmatch(r"[A-Z0-9]{1,40}", symbol) is None:
+        raise ValueError("invalid Binance spot symbol")
+    return symbol
+
+
 class BinanceSource:
     id = "binance"
     capabilities = Capabilities(historical_trades=True, live_trades=True)
@@ -56,8 +64,11 @@ class BinanceSource:
         )
 
     def fetch_history(self, symbol: str, start_us: int, end_us: int) -> TradeBatch:
-        if start_us >= end_us or start_us % 1000 or end_us % 1000:
-            raise ValueError("historical request must be ordered and millisecond aligned")
+        require_symbol(symbol)
+        if start_us >= end_us:
+            raise ValueError("historical request end must follow start")
+        if end_us > time.time_ns() // 1000:
+            raise ValueError("historical coverage cannot include future time")
         cursor: int | None = None
         trades: list[Trade] = []
         previous: Trade | None = None
@@ -99,8 +110,15 @@ class BinanceSource:
     async def history(self, symbol: str, start_us: int, end_us: int) -> TradeBatch:
         return await asyncio.to_thread(self.fetch_history, symbol, start_us, end_us)
 
+    async def server_time(self) -> int:
+        payload: object = json.loads(await asyncio.to_thread(self.http.get, f"{REST_BASE}/time"))
+        if not isinstance(payload, dict) or type(payload.get("serverTime")) is not int:
+            raise ValueError("invalid Binance server clock response")
+        return timestamp_us(payload["serverTime"])
+
     async def stream(self, symbol: str) -> AsyncIterator[Trade]:
         # A disconnect ends this iterator. The caller marks a gap before reconnecting.
+        require_symbol(symbol)
         url = f"wss://data-stream.binance.vision/ws/{symbol.lower()}@aggTrade?timeUnit=MICROSECOND"
         async with connect(url, open_timeout=10, close_timeout=3, max_size=65536) as socket:
             async for message in socket:

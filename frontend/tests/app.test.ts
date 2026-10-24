@@ -80,14 +80,14 @@ describe('research workspace', () => {
     const wrapper = mount(App, options)
     await flushPromises()
     const grid = {
-      timestamp_us: 1000000,
+      timestamp_us: Date.now() * 1000,
       reference_price: '1000',
       prices: [{ lower: '950', upper: '1050' }],
       windows: [{ start_us: 6000000, end_us: 11000000 }],
     }
     sockets[0]!.emit({
       status: 'ready',
-      timestamp_us: 1000000,
+      timestamp_us: Date.now() * 1000,
       reference_price: '1000',
       grid,
       probabilities: [[0.5]],
@@ -102,6 +102,34 @@ describe('research workspace', () => {
     await flushPromises()
     expect(wrapper.find('chart-stub').exists()).toBe(false)
     expect(wrapper.text()).toContain('行情已过期')
+    wrapper.unmount()
+  })
+
+  it('rejects buffered frames using monotonic time rather than the host clock', async () => {
+    setupFetch()
+    const wrapper = mount(App, options)
+    await flushPromises()
+    const timestamp = Date.now() * 1000 - 10_000_000
+    const timer = vi.spyOn(performance, 'now').mockReturnValue(0)
+    const buffered = {
+      status: 'ready',
+      timestamp_us: timestamp,
+      grid: {
+        timestamp_us: timestamp,
+        reference_price: '1000',
+        prices: [{ lower: '950', upper: '1050' }],
+        windows: [{ start_us: timestamp + 5e6, end_us: timestamp + 10e6 }],
+      },
+      probabilities: [[0.5]],
+    }
+    sockets[0]!.emit(buffered)
+    await flushPromises()
+    expect(wrapper.find('chart-stub').exists()).toBe(true)
+    timer.mockReturnValue(10000)
+    sockets[0]!.emit(buffered)
+    await flushPromises()
+    expect(wrapper.find('chart-stub').exists()).toBe(false)
+    expect(wrapper.text()).toContain('推送已过期')
     wrapper.unmount()
   })
 

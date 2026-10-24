@@ -5,13 +5,16 @@ import logging
 import sqlite3
 import time
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from decimal import Decimal
 from typing import Protocol
 
+import numpy as np
 from websockets.exceptions import WebSocketException
 
+from pripre.clock import ClockSample, MonotonicUTC
 from pripre.config import AppConfig
+from pripre.data.http import DownloadError
 from pripre.data.source import MarketSource
 from pripre.domain import Trade
 from pripre.features.volatility import trailing_volatility
@@ -26,23 +29,25 @@ class ProbabilityEngine(Protocol):
     def predict(self, reference: Decimal, timestamp_us: int, volatility: float) -> Forecast: ...
 
 
-def wall_us() -> int:
-    return time.time_ns() // 1000
-
-
 class MatrixRuntime:
     def __init__(
         self,
         config: AppConfig,
         source: MarketSource | None = None,
         engine: ProbabilityEngine | None = None,
-        clock: Callable[[], int] = wall_us,
+        clock: Callable[[], int] | None = None,
+        clock_sync: Callable[[], Awaitable[int]] | None = None,
         journal: PredictionJournal | None = None,
     ) -> None:
         self.config = config
         self.source = source
         self.engine = engine
-        self.clock = clock
+        if clock is not None and clock_sync is not None:
+            raise ValueError("choose either an injected clock or a source clock synchronizer")
+        self._utc = MonotonicUTC()
+        self.clock = clock or self._utc
+        self._clock_sync = clock_sync
+        self.clock_uncertainty_us: int | None = None
         self.journal = journal
         self.trades: deque[Trade] = deque()
         self.coverage_start_us: int | None = None
@@ -122,13 +127,23 @@ class MatrixRuntime:
         delay = 1
         while True:
             try:
+                if self._clock_sync is not None:
+                    samples: list[ClockSample] = []
+                    for _ in range(3):
+                        start_ns = time.monotonic_ns()
+                        try:
+                            source_us = await self._clock_sync()
+                            samples.append(ClockSample(source_us, start_ns, time.monotonic_ns()))
+                        except (OSError, ValueError, DownloadError):
+                            continue
+                    self.clock_uncertainty_us = self._utc.synchronize_samples(samples)
                 async for trade in self.source.stream(self.config.source.symbol):
                     self.ingest(trade)
                     delay = 1
                 raise ConnectionError("trade stream ended")
             except asyncio.CancelledError:
                 raise
-            except (OSError, ValueError, ConnectionError, WebSocketException) as exc:
+            except (OSError, ValueError, ConnectionError, WebSocketException, DownloadError) as exc:
                 logger.warning("Trade feed disconnected: %s", type(exc).__name__)
                 self.disconnect()
                 self.reconnects += 1
@@ -169,6 +184,7 @@ class MatrixRuntime:
             "gaps": self.gaps,
             "duplicates": self.duplicates,
             "reconnects": self.reconnects,
+            "clock_uncertainty_us": self.clock_uncertainty_us,
         }
         if not self.config.runtime.live_enabled:
             payload["status"] = "disabled"
@@ -186,6 +202,13 @@ class MatrixRuntime:
             try:
                 volatility = trailing_volatility(history, now)
                 forecast = await asyncio.to_thread(self.engine.predict, last.price, now, volatility)
+                matrix = forecast.probabilities
+                if (
+                    matrix.shape != (self.config.grid.rows, self.config.grid.columns)
+                    or np.any(~np.isfinite(matrix))
+                    or np.any((matrix < 0) | (matrix > 1))
+                ):
+                    raise ValueError("estimator returned an invalid probability matrix")
                 elapsed = (time.perf_counter() - start) * 1000
                 self.computations += 1
                 # Feed can disconnect or advance through a gap while inference runs in its thread.
@@ -202,6 +225,9 @@ class MatrixRuntime:
                         status=forecast.status,
                         grid=forecast.grid.model_dump(mode="json"),
                         model=forecast.model,
+                        model_version=forecast.version,
+                        trained_through_us=forecast.trained_through_us,
+                        seed=self.config.runtime.seed,
                         paths=forecast.paths,
                         volatility=volatility,
                         calculation_ms=elapsed,

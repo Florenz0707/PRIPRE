@@ -76,3 +76,40 @@ def test_sequence_gap_requires_a_new_warmup_and_duplicates_are_ignored() -> None
     runtime.ingest(trade(3, 91))
     assert runtime.duplicates == 1 and runtime.gaps == 1
     assert runtime.coverage_start_us == 91_000_000 and len(runtime.trades) == 1
+
+
+def test_feed_gap_during_inference_discards_the_finished_matrix() -> None:
+    import threading
+
+    async def run() -> None:
+        started = threading.Event()
+        release = threading.Event()
+        config = AppConfig(runtime=RuntimeConfig(live_enabled=True))
+
+        class DelayedEngine(Engine):
+            def predict(self, reference: Decimal, timestamp_us: int, volatility: float) -> Forecast:
+                started.set()
+                assert release.wait(timeout=2)
+                return super().predict(reference, timestamp_us, volatility)
+
+        runtime = MatrixRuntime(config, engine=DelayedEngine(config), clock=lambda: 61_000_000)
+        for second in range(62):
+            runtime.ingest(
+                Trade(
+                    instrument="BTC_USDT",
+                    source="binance",
+                    sequence=second,
+                    timestamp_us=second * 1_000_000,
+                    price=Decimal(10000),
+                    quantity=Decimal(1),
+                )
+            )
+        pending = asyncio.create_task(runtime.tick())
+        assert await asyncio.to_thread(started.wait, 1)
+        runtime.disconnect()
+        release.set()
+        result = await pending
+        assert result["probabilities"] is None
+        assert result["status"] == "warming_up"
+
+    asyncio.run(run())

@@ -39,3 +39,13 @@ def test_missing_research_report_is_explicit(tmp_path: Path) -> None:
     config = AppConfig(history=HistoryConfig(data_dir=tmp_path))
     with TestClient(create_app(config)) as client:
         assert client.get("/api/research").status_code == 404
+
+
+def test_corrupt_research_report_returns_a_recoverable_error(tmp_path: Path) -> None:
+    from pripre.config import AppConfig, HistoryConfig
+
+    path = tmp_path / "research" / "report.json"
+    path.parent.mkdir()
+    path.write_text("{broken")
+    with TestClient(create_app(AppConfig(history=HistoryConfig(data_dir=tmp_path)))) as client:
+        assert client.get("/api/research").status_code == 503

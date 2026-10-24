@@ -1,6 +1,7 @@
 """Replay origins and training paths from verified, sampled trade intervals."""
 
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -27,6 +28,8 @@ def load_examples(config: AppConfig) -> list[Example]:
     directory = config.history.data_dir / config.instrument.id / config.source.provider / "trades"
     examples: list[Example] = []
     for file in sorted(directory.glob("*.npz")):
+        if not config.history.start <= date.fromisoformat(file.stem) <= config.history.end_date():
+            continue
         examples.extend(examples_from_file(file, config))
     return examples
 

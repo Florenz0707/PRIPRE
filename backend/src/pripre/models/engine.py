@@ -4,6 +4,7 @@ import numpy as np
 
 from pripre.backtesting.dataset import load_examples
 from pripre.config import AppConfig
+from pripre.data.integrity import research_fingerprint
 from pripre.models.calibration import ProbabilityCalibrator
 from pripre.models.conditional import CalibratedEstimator, ConditionalEstimator
 
@@ -28,4 +29,10 @@ def build_engine(config: AppConfig) -> CalibratedEstimator:
         ]
     )
     labels = np.stack([item.labels for item in calibration])
-    return CalibratedEstimator(estimator, ProbabilityCalibrator.fit(predictions, labels))
+    fingerprint = research_fingerprint(config)
+    return CalibratedEstimator(
+        estimator,
+        ProbabilityCalibrator.fit(predictions, labels),
+        version="calibrated-path-v1-" + fingerprint[:16],
+        trained_through_us=max(item.path.end_us for item in examples),
+    )

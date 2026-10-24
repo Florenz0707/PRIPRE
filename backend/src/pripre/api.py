@@ -39,18 +39,19 @@ def create_app(config: AppConfig | None = None, runtime: MatrixRuntime | None = 
     if runtime is None:
         source = None
         journal = None
+        clock_sync = None
         if settings.runtime.live_enabled:
             registry = SourceRegistry()
-            registry.register(
-                BinanceSource(settings.instrument, PublicHTTP(DownloadBudget(100, 1048576))),
-                settings.instrument,
-                settings.source.symbol,
+            binance = BinanceSource(
+                settings.instrument, PublicHTTP(DownloadBudget(1_000_000, 64 * 1048576))
             )
+            registry.register(binance, settings.instrument, settings.source.symbol)
+            clock_sync = binance.server_time
             source, _ = registry.resolve(
                 settings.instrument.id, settings.source.provider, live=True
             )
             journal = PredictionJournal(settings.history.data_dir / "live" / "predictions.sqlite")
-        runtime = MatrixRuntime(settings, source=source, journal=journal)
+        runtime = MatrixRuntime(settings, source=source, journal=journal, clock_sync=clock_sync)
     service = runtime
 
     @asynccontextmanager
@@ -81,7 +82,12 @@ def create_app(config: AppConfig | None = None, runtime: MatrixRuntime | None = 
         path = settings.history.data_dir / "research" / "report.json"
         if not path.exists():
             raise HTTPException(404, "Research report is not available; run the backtest command")
-        result: dict[str, object] = json.loads(path.read_text())
+        try:
+            result: dict[str, object] = json.loads(path.read_text())
+            if not isinstance(result, dict) or "models" not in result:
+                raise ValueError("invalid research report")
+        except (OSError, ValueError) as exc:
+            raise HTTPException(503, "Research report could not be read") from exc
         return result
 
     @app.websocket("/api/stream")

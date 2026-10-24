@@ -65,8 +65,8 @@ class GridConfig(BaseModel):
 
 class SourceConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
-    provider: str = "binance"
-    symbol: str = Field(default="BTCUSDT", pattern=r"^[A-Z0-9]+$")
+    provider: str = Field(default="binance", pattern=r"^[a-z][a-z0-9_-]{0,63}$")
+    symbol: str = Field(default="BTCUSDT", min_length=1, max_length=128)
 
 
 class HistoryConfig(BaseModel):
@@ -111,6 +111,8 @@ class AppConfig(BaseModel):
 
     @model_validator(mode="after")
     def tick_alignment(self) -> Self:
+        if self.history.sample_seconds < 60 + self.grid.horizon_seconds:
+            raise ValueError("historical sample must cover warmup plus the full forecast horizon")
         if self.grid.price_step % self.instrument.tick_size:
             raise ValueError("price step must be a multiple of the instrument tick size")
         return self

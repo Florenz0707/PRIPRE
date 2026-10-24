@@ -12,6 +12,7 @@ from pripre.models.paths import EmpiricalEstimator, Forecast
 
 class ConditionalEstimator(EmpiricalEstimator):
     name = "conditional-raw"
+    version = "conditional-path-v1"
 
     def select(self, volatility: float) -> NDArray[np.int64]:
         historical = np.array([path.volatility for path in self.paths], dtype=np.float64)
@@ -31,12 +32,26 @@ class ConditionalEstimator(EmpiricalEstimator):
 class CalibratedEstimator:
     name = "conditional-calibrated"
 
-    def __init__(self, estimator: ConditionalEstimator, calibrator: ProbabilityCalibrator) -> None:
+    def __init__(
+        self,
+        estimator: ConditionalEstimator,
+        calibrator: ProbabilityCalibrator,
+        version: str = "calibrated-path-v1",
+        trained_through_us: int | None = None,
+    ) -> None:
         self.estimator = estimator
         self.calibrator = calibrator
+        self.version = version
+        self.trained_through_us = trained_through_us
 
     def predict(self, reference: Decimal, timestamp_us: int, volatility: float) -> Forecast:
+        if self.trained_through_us is not None and self.trained_through_us > timestamp_us:
+            raise ValueError("calibration data reaches beyond prediction origin")
         forecast = self.estimator.predict(reference, timestamp_us, volatility)
         return replace(
-            forecast, model=self.name, probabilities=self.calibrator.apply(forecast.probabilities)
+            forecast,
+            model=self.name,
+            probabilities=self.calibrator.apply(forecast.probabilities),
+            version=self.version,
+            trained_through_us=self.trained_through_us,
         )

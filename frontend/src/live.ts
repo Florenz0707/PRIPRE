@@ -8,9 +8,11 @@ export function createLiveConnection() {
   let reconnect: ReturnType<typeof setTimeout> | undefined
   let expiry: ReturnType<typeof setTimeout> | undefined
   let stopped = false
+  let anchor: { timestamp: number; elapsed: number } | undefined
 
   function connect() {
     if (stopped) return
+    anchor = undefined
     socket = new WebSocket(
       `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/stream`,
     )
@@ -19,7 +21,28 @@ export function createLiveConnection() {
     }
     socket.onmessage = (event) => {
       try {
-        snapshot.value = parseSnapshot(JSON.parse(String(event.data)))
+        const next = parseSnapshot(JSON.parse(String(event.data)))
+        const elapsed = performance.now()
+        if (
+          Number.isFinite(next.timestamp_us) &&
+          (!anchor || next.status !== 'ready')
+        ) {
+          anchor = { timestamp: next.timestamp_us, elapsed }
+        }
+        const age = anchor
+          ? (anchor.timestamp +
+              (elapsed - anchor.elapsed) * 1000 -
+              next.timestamp_us) /
+            1000
+          : 0
+        snapshot.value =
+          next.status === 'ready' && (!Number.isFinite(age) || age > 3500)
+            ? {
+                status: 'connection_stale',
+                timestamp_us: next.timestamp_us,
+                probabilities: null,
+              }
+            : next
         if (expiry) clearTimeout(expiry)
         expiry = setTimeout(() => {
           snapshot.value = {

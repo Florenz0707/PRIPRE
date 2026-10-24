@@ -11,6 +11,13 @@ from pripre.domain import Coverage, Instrument, Trade
 
 
 def save_batch(path: Path, batch: TradeBatch, instrument: Instrument, source: str) -> None:
+    if any(
+        item.instrument != instrument.id
+        or item.source != source
+        or item.price % instrument.tick_size
+        for item in batch.trades
+    ):
+        raise ValueError("trade identity or price precision differs from dataset")
     path.parent.mkdir(parents=True, exist_ok=True)
     meta = {
         "schema": 1,

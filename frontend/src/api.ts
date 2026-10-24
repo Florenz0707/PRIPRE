@@ -47,6 +47,7 @@ export interface ModelReport {
 }
 export interface ResearchReport {
   config: { instrument: { base: string; quote: string } }
+  warmup_dates?: string[]
   generated_at: string
   model: string
   models: Record<string, ModelReport>
@@ -60,6 +61,8 @@ export interface ResearchReport {
   }[]
   data: {
     minute_rows: number
+    missing_minute_rows?: number
+    sampled_seconds?: number
     minute_gap_count: number
     minute_start_us: number | null
     minute_end_us: number | null

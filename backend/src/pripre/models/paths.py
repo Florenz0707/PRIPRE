@@ -27,12 +27,15 @@ class Forecast:
     model: str
     paths: int
     status: str = "ready"
+    version: str = "empirical-path-v1"
+    trained_through_us: int | None = None
 
 
 class EmpiricalEstimator:
     """Unconditional historical path baseline with deterministic Monte Carlo."""
 
     name = "empirical-baseline"
+    version = "empirical-path-v1"
 
     def __init__(
         self, paths: Sequence[TradePath], grid: GridConfig, count: int = 512, seed: int = 2026
@@ -69,4 +72,11 @@ class EmpiricalEstimator:
             valid = (price_rows >= 0) & (price_rows < rows) & (columns >= 0) & (columns < cols)
             touched = np.unique(price_rows[valid] * cols + columns[valid])
             counts[touched] += int(weight)
-        return Forecast(grid, counts.reshape(rows, cols) / self.count, self.name, self.count)
+        return Forecast(
+            grid,
+            counts.reshape(rows, cols) / self.count,
+            self.name,
+            self.count,
+            version=self.version,
+            trained_through_us=max(path.end_us for path in self.paths),
+        )

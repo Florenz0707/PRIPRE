@@ -11,6 +11,7 @@ from pripre.backtesting.dataset import Example, load_examples
 from pripre.backtesting.metrics import day_bootstrap, metrics
 from pripre.config import AppConfig
 from pripre.data.history import dataset_summary
+from pripre.data.integrity import research_fingerprint
 from pripre.data.store import write_json
 from pripre.features.market_context import market_context
 from pripre.models.calibration import ProbabilityCalibrator
@@ -23,8 +24,8 @@ def folds(days: list[str]) -> list[tuple[list[str], list[str]]]:
         raise ValueError(
             "at least ten distinct sampled dates are required for chronological replay"
         )
-    initial = max(5, len(days) // 2)
-    width = max(1, (len(days) - initial + 2) // 3)
+    initial = min(10, len(days) // 2)
+    width = 30
     return [
         (days[:index], days[index : index + width]) for index in range(initial, len(days), width)
     ]
@@ -125,6 +126,7 @@ def run_research(config: AppConfig) -> dict[str, object]:
             raw = conditional.predict(
                 item.grid.reference_price, item.grid.timestamp_us, item.volatility
             )
+            calibrated_values = calibrator.apply(raw.probabilities)
             durations.append((perf_counter() - start) * 1000)
             predictions[names[0]].append(
                 baseline.predict(
@@ -132,7 +134,7 @@ def run_research(config: AppConfig) -> dict[str, object]:
                 ).probabilities
             )
             predictions[names[1]].append(raw.probabilities)
-            predictions[names[2]].append(calibrator.apply(raw.probabilities))
+            predictions[names[2]].append(calibrated_values)
             ood += int(raw.status != "ready")
             labels.append(item.labels)
             testing_examples.append(item)
@@ -140,18 +142,40 @@ def run_research(config: AppConfig) -> dict[str, object]:
                 "low" if item.volatility < low else "high" if item.volatility > high else "normal"
             )
     y = np.stack(labels)
+    stacked = {name: np.stack(values) for name, values in predictions.items()}
     models = {
-        name: summarize(np.stack(values), y, testing_examples, regimes, config)
-        for name, values in predictions.items()
+        name: summarize(values, y, testing_examples, regimes, config)
+        for name, values in stacked.items()
     }
+    comparisons: list[dict[str, object]] = []
+    for candidate, reference in ((names[1], names[0]), (names[2], names[0]), (names[2], names[1])):
+        differences = np.nanmean(
+            (stacked[candidate] - y) ** 2 - (stacked[reference] - y) ** 2, axis=(1, 2)
+        )
+        by_day: dict[str, list[float]] = defaultdict(list)
+        for item, difference in zip(testing_examples, differences, strict=True):
+            by_day[item.day].append(float(difference))
+        blocks = [float(np.mean(values)) for values in by_day.values()]
+        comparisons.append(
+            {
+                "candidate": candidate,
+                "reference": reference,
+                "brier_difference": float(np.mean(differences)),
+                "paired_day_block_95": day_bootstrap(blocks, config.runtime.seed),
+            }
+        )
     result: dict[str, object] = {
         "generated_at": datetime.now(UTC).isoformat(),
+        "dataset_fingerprint": research_fingerprint(config),
+        "algorithm_version": "empirical-conditional-calibration-v1",
         "model": calibrated.name,
         "config": config.model_dump(mode="json"),
         "data": dataset_summary(config),
         "market_context": market_context(config),
         "folds": fold_reports,
+        "warmup_dates": days[: min(10, len(days) // 2)],
         "models": models,
+        "comparisons": comparisons,
         "summary": models[calibrated.name]["summary"],
         "out_of_distribution_origins": ood,
         "latency_ms": {

@@ -21,7 +21,12 @@ class ProbabilityCalibrator:
     ) -> "ProbabilityCalibrator":
         valid = np.isfinite(labels)
         p, y = probabilities[valid].ravel(), labels[valid].ravel()
-        if not len(p) or np.any((p < 0) | (p > 1)):
+        if (
+            not len(p)
+            or np.any(~np.isfinite(p))
+            or np.any((p < 0) | (p > 1))
+            or np.any((y != 0) & (y != 1))
+        ):
             raise ValueError("calibration requires known labels and valid probabilities")
         x: list[float] = []
         totals: list[float] = []

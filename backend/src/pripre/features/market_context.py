@@ -6,15 +6,13 @@ from datetime import UTC, datetime
 import numpy as np
 
 from pripre.config import AppConfig
+from pripre.data.history import load_minutes
 
 
 def market_context(config: AppConfig) -> list[dict[str, object]]:
-    directory = config.history.data_dir / config.instrument.id / config.source.provider / "minutes"
     grouped: dict[int, list[list[int]]] = defaultdict(list)
-    for file in sorted(directory.glob("*.npz")):
-        with np.load(file, allow_pickle=False) as archive:
-            for row in archive["minutes"]:
-                grouped[int(row[0]) // 86_400_000_000].append([int(value) for value in row])
+    for row in load_minutes(config):
+        grouped[int(row[0]) // 86_400_000_000].append([int(value) for value in row])
     result: list[dict[str, object]] = []
     tick = float(config.instrument.tick_size)
     for day, rows in sorted(grouped.items()):

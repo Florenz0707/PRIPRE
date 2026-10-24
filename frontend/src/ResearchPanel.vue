@@ -267,10 +267,17 @@ const windows = computed<EChartsOption>(() => ({
     <p class="notice">
       日期筛选只影响下方行情图；上方概率指标来自报告中的完整样本外测试集。
     </p>
-    <Chart :option="market" label="研究日期范围的 BTC 价格" />
+    <Chart
+      :option="market"
+      :label="`研究日期范围的 ${report.config.instrument.base} 价格`"
+    />
     <Chart :option="volatility" label="研究日期范围的市场波动阶段" />
     <details>
       <summary>滚动验证区间与限制</summary>
+      <p v-if="report.warmup_dates?.length">
+        初始预热：{{ report.warmup_dates[0] }} 至
+        {{ report.warmup_dates.at(-1) }}；这些日期不作为样本外测试。
+      </p>
       <ul>
         <li v-for="(fold, i) in report.folds" :key="i">
           第 {{ i + 1 }} 折：训练 {{ fold.train_start }}–{{

@@ -8,7 +8,7 @@
 - 本地 `data/` 挂载到 `/app/data`，保存分钟上下文、成交样本、回测报告及 SQLite 预测日志；不需要额外数据库服务。
 - 后端默认以 UID/GID 1000 运行，可按宿主机目录所有者调整，不以 root 写入研究数据。
 
-镜像中 Python 使用 `uv sync --locked --no-dev --no-editable`，前端使用 `pnpm install --frozen-lockfile`。部署构建与开发环境共用锁文件。镜像基础版本在 Dockerfile 中指定，发布前应重新构建并验证。
+镜像中 Python 使用 `uv sync --locked --no-dev --no-editable --reinstall-package pripre`，前端使用 `pnpm install --frozen-lockfile`。部署构建与开发环境共用锁文件。镜像基础版本在 Dockerfile 中指定，发布前应重新构建并验证。
 
 ## 启动
 
@@ -80,3 +80,19 @@ docker compose run --rm backend /app/.venv/bin/python -m pripre.cli backtest --c
 完成本地数据准备后，将 `.env` 中 `PRIPRE_LIVE_ENABLED` 改为 `true`，执行 `docker compose up -d --wait`。模型从当前本地样本训练；新增样本后重启后端以重建模型。WebSocket 使用同一入口 `/api/stream`，无需另开端口。
 
 备份时保存整个宿主机数据目录。复制 SQLite 日志前先停止后端，避免复制正在写入的文件；原始成交样本和分钟分区通过临时文件原子替换写入。恢复时将备份放回数据目录并确认 UID/GID 权限，再启动服务。`docker compose down` 不删除宿主机数据，不手工清理研究目录作为部署步骤。
+
+镜像构建缓存只用于加速依赖下载，应用本身每次强制重新安装。构建中运行 `scripts/verify_installed.py`，逐文件核对实际安装的应用包与复制到镜像的源码，防止修改源码后错误复用旧 wheel。该检查要求非 editable 安装，属于镜像构建门禁。
+
+## 本次本地运行实例
+
+2026-10-24 验收后保留的实例地址为 `http://127.0.0.1:8080`，Compose 项目名为 `pripre`，已显式启用真实行情。数据来自隔离 worktree 的 `data/`；本机 PostgreSQL 未被使用或修改。
+
+在隔离 worktree 根目录管理该实例：
+
+```bash
+docker compose -p pripre ps
+PRIPRE_LIVE_ENABLED=true docker compose -p pripre up -d --build --wait
+docker compose -p pripre logs --tail=100 backend frontend
+# 需要停止时执行；保留宿主机研究数据
+docker compose -p pripre down
+```
