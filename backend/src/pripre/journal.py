@@ -28,3 +28,13 @@ class PredictionJournal:
                 "(SELECT timestamp_us FROM predictions ORDER BY timestamp_us DESC LIMIT ?)",
                 (self.retain,),
             )
+
+    def read(self, timestamp_us: int) -> dict[str, object] | None:
+        with sqlite3.connect(self.path) as connection:
+            row = connection.execute(
+                "SELECT payload FROM predictions WHERE timestamp_us=?", (timestamp_us,)
+            ).fetchone()
+        if row is None:
+            return None
+        result: dict[str, object] = json.loads(zlib.decompress(row[0]))
+        return result

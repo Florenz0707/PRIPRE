@@ -7,7 +7,7 @@ from time import perf_counter
 import numpy as np
 from numpy.typing import NDArray
 
-from pripre.backtesting.dataset import Example, load_examples
+from pripre.backtesting.dataset import DatasetAudit, Example, load_examples
 from pripre.backtesting.metrics import day_bootstrap, metrics
 from pripre.config import AppConfig
 from pripre.data.history import dataset_summary
@@ -75,7 +75,8 @@ def summarize(
 
 
 def run_research(config: AppConfig) -> dict[str, object]:
-    examples = load_examples(config)
+    audit = DatasetAudit()
+    examples = load_examples(config, audit)
     days = sorted({example.day for example in examples})
     names = ("empirical-baseline", "conditional-raw", "conditional-calibrated")
     predictions: dict[str, list[NDArray[np.float64]]] = {name: [] for name in names}
@@ -165,6 +166,8 @@ def run_research(config: AppConfig) -> dict[str, object]:
             }
         )
     result: dict[str, object] = {
+        "origin_audit": audit.report(),
+        "origin_stride_seconds": config.research.origin_stride_seconds,
         "generated_at": datetime.now(UTC).isoformat(),
         "dataset_fingerprint": research_fingerprint(config),
         "algorithm_version": "empirical-conditional-calibration-v1",

@@ -148,3 +148,9 @@ uv run --locked python -m pripre.cli backtest --config config/default.toml
 本次完整数据范围、方法、三模型分数、局限和实际验收证据见 [RESEARCH.md](RESEARCH.md)。
 
 本次验收后保留的本地实例：<http://127.0.0.1:8080>，包含实时矩阵和完整研究报告。Compose 项目名为 `pripre`，管理命令见部署说明。
+
+### 研究审计与预测留档
+
+回测报告包含 `origin_audit`，区分候选预测起点、有效起点与因数据覆盖不完整、缺少参考成交而排除的起点；未知窗口不能计为未触达。损坏或身份不匹配的数据直接报错，不静默排除。
+
+`[research].origin_stride_seconds` 默认 60，可配置为 1 进行每秒历史回放；这会增加计算量，不改变每个窗口内的成交触达定义。实时 SQLite 日志保留最近 3600 个更新，包括断流、预热等无有效概率状态和当时参数；不是永久档案。
