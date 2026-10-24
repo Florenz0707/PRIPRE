@@ -1,3 +1,5 @@
+name: '${COMPOSE_TAG:-PRIPRE_TEMP}'
+
 services:
   backend:
     build:
