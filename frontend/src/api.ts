@@ -40,12 +40,40 @@ export interface Metrics {
 export interface ModelReport {
   summary: Metrics
   daily: { date: string; brier: number; origins: number }[]
-  by_regime: (Metrics & { regime: string })[]
-  by_distance: (Metrics & { distance_steps: number })[]
-  by_window: (Metrics & { start_seconds: number })[]
+  by_regime: (GroupMetrics & { regime: string })[]
+  by_phase?: GroupMetrics[]
+  by_event?: GroupMetrics[]
+  by_anomaly?: GroupMetrics[]
+  live_policy?: {
+    suppressed_origins: number
+    suppression_ratio: number
+    published: Metrics
+  }
+  by_distance: (GroupMetrics & { distance_steps: number })[]
+  by_window: (GroupMetrics & { start_seconds: number })[]
   day_block_brier_95: [number, number] | null
 }
 export interface ResearchReport {
+  run_id?: string
+  dataset_fingerprint?: string
+  origin_stride_seconds?: number
+  selection?: {
+    start: string | null
+    end: string | null
+    origins: number
+    dates: number
+  }
+  origin_audit?: {
+    candidate_origins: number
+    accepted_origins: number
+    excluded_origins: number
+    excluded_by_reason: Record<string, number>
+  }
+  stage_analysis?: {
+    event_dates: string[]
+    sampled_event_dates: string[]
+    phase_dates: Record<string, string[]>
+  }
   config: { instrument: { base: string; quote: string } }
   warmup_dates?: string[]
   generated_at: string
@@ -147,4 +175,56 @@ export function parseSnapshot(value: unknown): Snapshot {
     frame.probabilities = null
   }
   return frame
+}
+
+export interface GroupMetrics extends Metrics {
+  regime?: string
+  distance_steps?: number
+  start_seconds?: number
+  origins?: number
+  dates?: number
+  day_block_brier_95?: [number, number] | null
+}
+export interface ReplayPage {
+  run_id: string
+  total: number
+  offset: number
+  origins: { timestamp_us: number; reference_price: string; day: string }[]
+  models: string[]
+}
+export interface ReplayDetail {
+  run_id: string
+  model: string
+  day: string
+  grid: Grid
+  probabilities: number[][]
+  labels: (number | null)[][]
+  status: string
+}
+export interface ExperimentReport {
+  dataset_fingerprint: string
+  train_dates: string[]
+  validation_dates: string[]
+  untouched_test_dates: string[]
+  validation_origins: number
+  variants: {
+    count: number
+    seed: number
+    fraction: number
+    minimum: number
+    mapping: string
+    horizon: number
+    stride: number
+    origins: number
+    brier: number
+    mean_ms: number
+    rmse_vs_4096_paths: number
+  }[]
+  monte_carlo: {
+    paths: number
+    seeds: number
+    mean_cell_std: number
+    max_cell_std: number
+  }[]
+  limitations: string[]
 }

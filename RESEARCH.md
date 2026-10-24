@@ -123,3 +123,10 @@ uv run --locked python scripts/check.py
 ### 每秒历史回放验证边界
 
 在独立输出目录 `/tmp/pripre-second-replay`，使用已有 2026-01-01 至 01-20 真实成交样本，每秒取一个起点。共 3620 个有效候选起点、1810 个样本外测试起点，默认 735 格，主模型计算 P95 约 24.38 ms。该验证证明配置与回放能够处理每秒起点；没有执行全年逐秒连续成交回放。全周期默认报告仍为 60 秒起点间隔。
+
+### 面板补齐验收
+
+- 自动检查：49 个后端测试、10 个前端测试，全部生产构建、类型/lint、pre-commit 和 Compose 配置检查通过。
+- 独立 Compose 项目 `pripre-research-acceptance` 在本地 18080 端口完成镜像构建、容器健康及 Nginx/API/WebSocket 链路验证；实时开关关闭，没有新增外部行情请求。该验证不替代首次真实行情验收。
+- Chromium 以实际本地报告验证：2026 年 2 月筛选得到 112 个样本外起点，模型比较与分组同步更新；历史冻结概率与真实标签、频率基准切换、无样本范围、全范围恢复、实验表格通过。1440px 与 390px 页面无运行错误和整体横向溢出。
+- 新浏览器验收记录及截图保存于本地 `data/research-v2-browser-acceptance.json`、`data/research-v2-desktop.png`、`data/research-v2-mobile.png`。正式服务保持暂停，独立验收服务在检查后停止。
