@@ -1,23 +1,53 @@
 """A volatility-conditioned path adapter and its independently fitted calibrator."""
 
+from collections.abc import Sequence
 from dataclasses import replace
 from decimal import Decimal
 
 import numpy as np
 from numpy.typing import NDArray
 
+from pripre.config import GridConfig
 from pripre.models.calibration import ProbabilityCalibrator
-from pripre.models.paths import EmpiricalEstimator, Forecast
+from pripre.models.paths import EmpiricalEstimator, Forecast, TradePath
 
 
 class ConditionalEstimator(EmpiricalEstimator):
     name = "conditional-raw"
     version = "conditional-path-v1"
 
+    def __init__(
+        self,
+        paths: Sequence[TradePath],
+        grid: GridConfig,
+        count: int = 512,
+        seed: int = 2026,
+        *,
+        candidate_fraction: float = 1 / 3,
+        minimum_candidates: int = 16,
+        mapping: str = "relative",
+    ) -> None:
+        super().__init__(paths, grid, count, seed)
+        if not 0 < candidate_fraction <= 1 or minimum_candidates < 1:
+            raise ValueError("invalid candidate selection parameters")
+        if mapping not in ("relative", "absolute"):
+            raise ValueError("unknown price mapping")
+        self.candidate_fraction = candidate_fraction
+        self.minimum_candidates = minimum_candidates
+        self.mapping = mapping
+
+    def map_prices(self, path: TradePath, reference: Decimal) -> NDArray[np.float64]:
+        if self.mapping == "absolute":
+            return float(reference) + path.relative_prices * path.origin_price
+        return super().map_prices(path, reference)
+
     def select(self, volatility: float) -> NDArray[np.int64]:
         historical = np.array([path.volatility for path in self.paths], dtype=np.float64)
         distances = np.abs(np.log(np.maximum(historical, 1e-9) / max(volatility, 1e-9)))
-        count = min(len(historical), max(16, len(historical) // 3))
+        count = min(
+            len(historical),
+            max(self.minimum_candidates, int(len(historical) * self.candidate_fraction)),
+        )
         return np.asarray(np.argsort(distances, kind="stable")[:count], dtype=np.int64)
 
     def predict(self, reference: Decimal, timestamp_us: int, volatility: float) -> Forecast:

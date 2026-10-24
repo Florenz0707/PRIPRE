@@ -88,6 +88,7 @@ def examples_from_file(
             volatility,
             times[future] - origin,
             prices[future] / float(reference) - 1,
+            float(reference),
         )
         labels = np.array(touch_labels(grid, batch.trades, batch.coverage), dtype=np.float64)
         result.append(Example(file.stem, grid, volatility, path, labels))
