@@ -56,7 +56,7 @@ docker compose up -d --build --wait
 docker compose down
 ```
 
-不使用 `down -v` 作为日常停止命令。后续引入持久化数据时，应补充卷、备份与恢复说明。
+不使用 `down -v` 作为日常停止命令。宿主机 `data/` 已持久化，备份与恢复方式见后文。
 
 ## PostgreSQL 与其他中间件
 
@@ -85,7 +85,7 @@ docker compose run --rm backend /app/.venv/bin/python -m pripre.cli backtest --c
 
 ## 本次本地运行实例
 
-2026-10-24 验收后保留的实例地址为 `http://127.0.0.1:8080`，Compose 项目名为 `pripre`，已显式启用真实行情。数据来自隔离 worktree 的 `data/`；本机 PostgreSQL 未被使用或修改。
+2026-10-24 首次验收实例地址为 `http://127.0.0.1:8080`，Compose 项目名为 `pripre`，曾显式启用真实行情，随后已按用户要求停止前后端容器。数据来自隔离 worktree 的 `data/`；本机 PostgreSQL 未被使用或修改。
 
 在隔离 worktree 根目录管理该实例：
 
@@ -96,3 +96,9 @@ docker compose -p pripre logs --tail=100 backend frontend
 # 需要停止时执行；保留宿主机研究数据
 docker compose -p pripre down
 ```
+
+## 冻结回测和开发实验数据
+
+新版 backtest 同时生成 `research/report.json` 及 `research/runs/<run_id>/replay.npz`，experiments 生成 `research/experiments.json`。部署使用原有数据目录挂载，无须新增中间件。更新镜像后显式执行 backtest 才能使用历史复盘；仅重启后端不会自动生成或覆盖离线报告。
+
+备份和恢复必须包含完整的 `research/` 子目录，保持报告与其运行 ID 对应的冻结证据一致；仅恢复 report.json 会导致日期指标和复盘接口不可用。旧运行不会自动删除。日常暂停可使用 `docker compose -p pripre stop`，保留容器与全部宿主机数据。

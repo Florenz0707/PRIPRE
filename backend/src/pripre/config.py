@@ -99,6 +99,11 @@ class RuntimeConfig(BaseModel):
     live_enabled: bool = False
 
 
+class ResearchConfig(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    origin_stride_seconds: int = Field(default=60, ge=1, le=60)
+
+
 class AppConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     instrument: Instrument = Instrument(
@@ -108,6 +113,7 @@ class AppConfig(BaseModel):
     grid: GridConfig = GridConfig()
     history: HistoryConfig = HistoryConfig()
     runtime: RuntimeConfig = RuntimeConfig()
+    research: ResearchConfig = ResearchConfig()
 
     @model_validator(mode="after")
     def tick_alignment(self) -> Self:

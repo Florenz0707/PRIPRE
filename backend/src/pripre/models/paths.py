@@ -18,6 +18,7 @@ class TradePath:
     volatility: float
     offsets_us: NDArray[np.int64]
     relative_prices: NDArray[np.float64]
+    origin_price: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,9 @@ class EmpiricalEstimator:
     def select(self, volatility: float) -> NDArray[np.int64]:
         return np.arange(len(self.paths), dtype=np.int64)
 
+    def map_prices(self, path: TradePath, reference: Decimal) -> NDArray[np.float64]:
+        return float(reference) * (1 + path.relative_prices)
+
     def predict(self, reference: Decimal, timestamp_us: int, volatility: float) -> Forecast:
         grid = self.config.build(reference, timestamp_us)
         candidates = self.select(volatility)
@@ -64,7 +68,7 @@ class EmpiricalEstimator:
         step = float(self.config.price_step)
         for index, weight in zip(indices, weights, strict=True):
             path = self.paths[int(index)]
-            prices = float(reference) * (1 + path.relative_prices)
+            prices = self.map_prices(path, reference)
             price_rows = np.floor((prices - lower) / step).astype(np.int64)
             columns = (path.offsets_us - self.config.first_window_seconds * 1_000_000) // (
                 self.config.window_seconds * 1_000_000

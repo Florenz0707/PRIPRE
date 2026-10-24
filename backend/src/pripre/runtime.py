@@ -185,6 +185,11 @@ class MatrixRuntime:
             "duplicates": self.duplicates,
             "reconnects": self.reconnects,
             "clock_uncertainty_us": self.clock_uncertainty_us,
+            "parameters": {
+                "grid": self.config.grid.model_dump(mode="json"),
+                "runtime": self.config.runtime.model_dump(mode="json"),
+            },
+            "seed": self.config.runtime.seed,
         }
         if not self.config.runtime.live_enabled:
             payload["status"] = "disabled"
@@ -235,12 +240,17 @@ class MatrixRuntime:
                     )
                     if forecast.status == "ready":
                         payload["probabilities"] = forecast.probabilities.tolist()
-                        if self.journal is not None:
-                            await asyncio.to_thread(self.journal.append, now, payload.copy())
+
             except (ValueError, OSError, sqlite3.Error):
                 logger.exception("Matrix calculation failed")
                 payload["status"] = "model_error"
                 payload["probabilities"] = None
+        if self.journal is not None:
+            try:
+                await asyncio.to_thread(self.journal.append, now, payload.copy())
+            except (OSError, sqlite3.Error):
+                logger.exception("Prediction journal failed")
+                payload.update(status="journal_error", probabilities=None)
         return self._publish(payload)
 
     async def _ticker(self) -> None:

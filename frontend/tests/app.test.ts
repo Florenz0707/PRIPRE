@@ -71,6 +71,7 @@ describe('research workspace', () => {
     expect(wrapper.get('[role="status"]').text()).toContain('后端已连接')
     expect(wrapper.text()).toContain('实时采集尚未启用')
     await wrapper.findAll('nav button')[1]!.trigger('click')
+    await flushPromises()
     expect(wrapper.text()).toContain('尚无可用研究报告')
     wrapper.unmount()
   })

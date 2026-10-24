@@ -14,6 +14,7 @@ def research_fingerprint(config: AppConfig) -> str:
         "grid": config.grid.model_dump(mode="json"),
         "paths": config.runtime.paths,
         "seed": config.runtime.seed,
+        "research": config.research.model_dump(mode="json"),
     }
     fingerprint = hashlib.sha256(json.dumps(settings, sort_keys=True).encode())
     directory = config.history.data_dir / config.instrument.id / config.source.provider / "trades"

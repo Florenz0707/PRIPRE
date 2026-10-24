@@ -26,6 +26,10 @@ def market_context(config: AppConfig) -> list[dict[str, object]]:
                 "low": float(np.min(array[:, 3]) * tick),
                 "return": float(close[-1] / close[0] - 1),
                 "volatility": float(np.std(np.diff(np.log(close)))) if len(close) > 1 else 0,
+                "efficiency": float(
+                    abs(np.log(close[-1] / close[0]))
+                    / max(float(np.sum(np.abs(np.diff(np.log(close))))), 1e-12)
+                ),
                 "minutes": len(rows),
                 "trades": int(np.sum(array[:, 4])),
             }

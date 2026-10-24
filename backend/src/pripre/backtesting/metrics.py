@@ -44,3 +44,18 @@ def day_bootstrap(day_scores: list[float], seed: int = 2026) -> list[float] | No
     means = np.mean(rng.choice(values, size=(1000, len(values)), replace=True), axis=1)
     low, high = np.quantile(means, [0.025, 0.975])
     return [float(low), float(high)]
+
+
+def day_ratio_bootstrap(
+    error_sums: list[float], counts: list[int], seed: int = 2026
+) -> list[float] | None:
+    """Resample whole dates, retaining each date's known-cell denominator."""
+    if len(error_sums) != len(counts) or any(count <= 0 for count in counts):
+        raise ValueError("each date needs a matching positive denominator")
+    if len(counts) < 2:
+        return None
+    rng = np.random.default_rng(seed)
+    indices = rng.integers(0, len(counts), size=(1000, len(counts)))
+    ratios = np.array(error_sums)[indices].sum(axis=1) / np.array(counts)[indices].sum(axis=1)
+    low, high = np.quantile(ratios, [0.025, 0.975])
+    return [float(low), float(high)]

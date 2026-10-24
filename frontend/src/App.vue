@@ -24,6 +24,7 @@ const statusLabels: Record<string, string> = {
   out_of_distribution: '波动超出训练范围，矩阵暂停',
   calculation_overdue: '计算超时，矩阵暂停',
   model_error: '模型计算失败',
+  journal_error: '预测日志写入失败，矩阵暂停',
   connection_stale: '推送已过期，等待重连',
   connection_lost: '服务连接中断，正在重连',
   invalid_response: '矩阵数据无效',
