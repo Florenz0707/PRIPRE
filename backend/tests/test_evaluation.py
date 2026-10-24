@@ -143,3 +143,20 @@ def test_full_research_and_development_experiments_leave_replay_evidence(tmp_pat
         response = client.get("/api/research?start=2026-01-11&end=2026-01-11")
         assert response.status_code == 200
         assert response.json()["selection"]["origins"] > 0
+
+
+def test_date_block_intervals_keep_known_cell_weights() -> None:
+    from pripre.backtesting.evaluation import grouped_metrics
+
+    # Nine dates have 100 known correct cells; one has just one known error.
+    # Treating dates as equal-sized observations would incorrectly report a 0.1 point estimate.
+    p = np.zeros((10, 1, 100))
+    y = np.zeros_like(p)
+    y[9] = np.nan
+    y[9, 0, 0] = 1
+    result = grouped_metrics(p, y, [f"2026-01-{i + 1:02d}" for i in range(10)])
+    assert result["brier"] == pytest.approx(1 / 901)
+    interval = result["day_block_brier_95"]
+    assert isinstance(interval, list)
+    assert interval[0] == 0 and 0 < interval[1] < 0.02
+    assert result["count"] == 901 and result["unknown"] == 99

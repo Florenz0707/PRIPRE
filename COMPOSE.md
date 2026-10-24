@@ -56,7 +56,7 @@ docker compose up -d --build --wait
 docker compose down
 ```
 
-不使用 `down -v` 作为日常停止命令。后续引入持久化数据时，应补充卷、备份与恢复说明。
+不使用 `down -v` 作为日常停止命令。宿主机 `data/` 已持久化，备份与恢复方式见后文。
 
 ## PostgreSQL 与其他中间件
 

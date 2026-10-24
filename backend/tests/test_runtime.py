@@ -2,11 +2,13 @@
 
 import asyncio
 from decimal import Decimal
+from pathlib import Path
 
 import numpy as np
 import pytest
 from pripre.config import AppConfig, RuntimeConfig
 from pripre.domain import Trade
+from pripre.journal import PredictionJournal
 from pripre.models.paths import Forecast
 from pripre.runtime import MatrixRuntime
 
@@ -22,12 +24,13 @@ class Engine:
         return Forecast(grid, np.full((21, 35), 0.25), "test-engine", 64)
 
 
-def test_one_computation_serves_fifty_latest_only_subscribers() -> None:
+def test_one_computation_serves_fifty_latest_only_subscribers(tmp_path: Path) -> None:
     async def run() -> None:
         now = [61_000_000]
         config = AppConfig(runtime=RuntimeConfig(live_enabled=True))
         engine = Engine(config)
-        runtime = MatrixRuntime(config, engine=engine, clock=lambda: now[0])
+        journal = PredictionJournal(tmp_path / "live.sqlite")
+        runtime = MatrixRuntime(config, engine=engine, clock=lambda: now[0], journal=journal)
         for second in range(62):
             runtime.ingest(
                 Trade(
@@ -44,6 +47,8 @@ def test_one_computation_serves_fifty_latest_only_subscribers() -> None:
             runtime.subscribe()
         snapshot = await runtime.tick()
         assert snapshot["status"] == "ready" and engine.calls == 1
+        recorded = journal.read(now[0])
+        assert recorded is not None and recorded["probabilities"] == snapshot["probabilities"]
         now[0] += 1_000_000
         await runtime.tick()
         assert engine.calls == 2 and all(queue.qsize() == 1 for queue in queues)
@@ -51,6 +56,9 @@ def test_one_computation_serves_fifty_latest_only_subscribers() -> None:
         now[0] += 10_000_000
         assert (await runtime.tick())["status"] == "stale"
         assert engine.calls == 2
+        recorded = journal.read(now[0])
+        assert recorded is not None and recorded["status"] == "stale"
+        assert recorded["probabilities"] is None
         runtime.disconnect()
         assert (await runtime.tick())["probabilities"] is None
 

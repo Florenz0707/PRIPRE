@@ -6,24 +6,26 @@ import numpy as np
 from numpy.typing import NDArray
 
 from pripre.backtesting.archive import OriginRecord
-from pripre.backtesting.metrics import day_bootstrap, metrics
+from pripre.backtesting.metrics import day_ratio_bootstrap, metrics
 from pripre.config import AppConfig
 
 
 def grouped_metrics(
     p: NDArray[np.float64], y: NDArray[np.float64], dates: list[str]
 ) -> dict[str, object]:
-    daily: dict[str, list[float]] = defaultdict(list)
+    sums: dict[str, float] = defaultdict(float)
+    counts: dict[str, int] = defaultdict(int)
     for i, day in enumerate(dates):
         known = np.isfinite(y[i])
         if np.any(known):
-            daily[day].append(float(np.mean((p[i][known] - y[i][known]) ** 2)))
+            sums[day] += float(np.sum((p[i][known] - y[i][known]) ** 2))
+            counts[day] += int(known.sum())
     result = metrics(p, y)
     result.update(
         origins=len(dates),
-        dates=len(daily),
+        dates=len(sums),
         unknown_ratio=float(np.mean(~np.isfinite(y))) if y.size else None,
-        day_block_brier_95=day_bootstrap([float(np.mean(v)) for v in daily.values()]),
+        day_block_brier_95=day_ratio_bootstrap(list(sums.values()), list(counts.values())),
     )
     return result
 

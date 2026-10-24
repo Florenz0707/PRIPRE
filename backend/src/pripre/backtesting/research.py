@@ -201,7 +201,7 @@ def run_research(config: AppConfig) -> dict[str, object]:
         "origin_stride_seconds": config.research.origin_stride_seconds,
         "generated_at": datetime.now(UTC).isoformat(),
         "dataset_fingerprint": research_fingerprint(config),
-        "algorithm_version": "empirical-conditional-calibration-v2",
+        "algorithm_version": "empirical-conditional-calibration-v3",
         "model": calibrated.name,
         "config": config.model_dump(mode="json"),
         "data": dataset_summary(config),

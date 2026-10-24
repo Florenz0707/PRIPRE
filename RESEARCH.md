@@ -130,3 +130,9 @@ uv run --locked python scripts/check.py
 - 独立 Compose 项目 `pripre-research-acceptance` 在本地 18080 端口完成镜像构建、容器健康及 Nginx/API/WebSocket 链路验证；实时开关关闭，没有新增外部行情请求。该验证不替代首次真实行情验收。
 - Chromium 以实际本地报告验证：2026 年 2 月筛选得到 112 个样本外起点，模型比较与分组同步更新；历史冻结概率与真实标签、频率基准切换、无样本范围、全范围恢复、实验表格通过。1440px 与 390px 页面无运行错误和整体横向溢出。
 - 新浏览器验收记录及截图保存于本地 `data/research-v2-browser-acceptance.json`、`data/research-v2-desktop.png`、`data/research-v2-mobile.png`。正式服务保持暂停，独立验收服务在检查后停止。
+
+### 分组区间口径复核
+
+分组按日重采样同时抽取各日误差总和与已知标签数，以二者总和之比形成 Brier 分布，避免各日分组大小不同时误将日期均值等权平均。整体每日日起点数相同的指标不受此修正影响。少于两日的分组没有区间；按日方法仍未覆盖更长的跨日相关性。新增不均衡已知标签回归案例。
+
+最终完整回测运行 ID 为 `ea8d195bc88c46efb12562409186174c`，研究算法版本 `empirical-conditional-calibration-v3`，数据/参数指纹为 `2172c4345993d35d7c8caf19babf76c9ededa54c7dbb2fd99df5f9eda519e642`。测试日期中下行趋势 68 日、震荡 153 日、上行趋势 65 日；此为事后描述性分类。最终全量自动检查为 **50 个后端测试、10 个前端测试**及生产构建、所有 pre-commit 和 Compose 配置检查通过。
