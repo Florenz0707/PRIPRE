@@ -41,3 +41,27 @@ def test_metrics_report_unknowns_and_perfect_probabilities() -> None:
     assert result["count"] == 2 and result["unknown"] == 1
     assert result["brier"] == 0 and result["skill_vs_zero"] == 1
     assert day_bootstrap([0.1, 0.1]) == pytest.approx([0.1, 0.1])
+
+
+def test_calibrator_is_monotone_even_when_sample_bins_are_reversed() -> None:
+    from pripre.models.calibration import ProbabilityCalibrator
+
+    p = np.array([0.1, 0.1, 0.9, 0.9])
+    y = np.array([1.0, 1.0, 0.0, 0.0])
+    calibrator = ProbabilityCalibrator.fit(p, y, prior_weight=0)
+    actual = calibrator.apply(np.linspace(0, 1, 11))
+    assert np.all(np.diff(actual) >= 0)
+    np.testing.assert_allclose(actual, 0.5)
+
+
+def test_conditioning_changes_selection_and_extreme_state_is_flagged() -> None:
+    from pripre.models.conditional import ConditionalEstimator
+
+    paths = [
+        TradePath(0, 15_000_000, float(i + 1) * 0.001, np.array([5_000_000]), np.array([0.0]))
+        for i in range(60)
+    ]
+    estimator = ConditionalEstimator(paths, GridConfig(half_width=1, horizon_seconds=15), 64)
+    assert max(estimator.select(0.001)) < 30
+    assert min(estimator.select(0.06)) > 20
+    assert estimator.predict(Decimal(1000), 20_000_000, 1).status == "out_of_distribution"
