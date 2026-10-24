@@ -1,0 +1,27 @@
+{
+  "name": "pripre-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "node": ">=24 <25",
+    "pnpm": ">=11 <12"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @pripre/frontend dev",
+    "test": "pnpm --filter @pripre/frontend test",
+    "build": "pnpm --filter @pripre/frontend build",
+    "typecheck": "pnpm --filter @pripre/frontend typecheck",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.13.0",
+    "eslint-plugin-vue": "^10.5.0",
+    "prettier": "^3.6.2",
+    "typescript-eslint": "^8.46.0"
+  }
+}

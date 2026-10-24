@@ -1,0 +1,78 @@
+minimum_pre_commit_version: '4.0.0'
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: Python lint (Ruff)
+        entry: uv run --locked ruff check --fix
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: Python format (Ruff)
+        entry: uv run --locked ruff format
+        language: system
+        types_or: [python, pyi]
+      - id: mypy
+        name: Python strict type check
+        entry: uv run --locked mypy
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: toml-sort
+        name: TOML format
+        entry: uv run --locked toml-sort --in-place
+        language: system
+        types: [toml]
+        exclude: ^uv\.lock$
+      - id: prettier
+        name: JS TS Vue JSON YAML Markdown CSS format
+        entry: pnpm exec prettier --write --ignore-unknown
+        language: system
+        types: [text]
+      - id: eslint
+        name: JS TS Vue lint
+        entry: pnpm lint
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: vue-tsc
+        name: TypeScript and Vue type check
+        entry: pnpm typecheck
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: check-yaml
+        name: YAML syntax
+        entry: uv run --locked check-yaml
+        language: system
+        types: [yaml]
+      - id: check-json
+        name: JSON syntax
+        entry: uv run --locked check-json
+        language: system
+        types: [json]
+      - id: check-toml
+        name: TOML syntax
+        entry: uv run --locked check-toml
+        language: system
+        types: [toml]
+      - id: end-of-file-fixer
+        name: Final newline
+        entry: uv run --locked end-of-file-fixer
+        language: system
+        types: [text]
+      - id: trailing-whitespace
+        name: Trailing whitespace
+        entry: uv run --locked trailing-whitespace-fixer
+        language: system
+        types: [text]
+      - id: check-merge-conflict
+        name: Merge conflict markers
+        entry: uv run --locked check-merge-conflict
+        language: system
+        types: [text]
+      - id: detect-private-key
+        name: Private key detection
+        entry: uv run --locked detect-private-key
+        language: system
+        types: [text]

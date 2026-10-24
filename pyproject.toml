@@ -1,0 +1,42 @@
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling>=1.27,<2"]
+
+[dependency-groups]
+dev = [
+  "httpx2>=2.16.0",
+  "mypy>=1.15,<2",
+  "pre-commit-hooks>=5,<7",
+  "pytest>=8,<10",
+  "ruff>=0.11,<1",
+  "toml-sort>=0.24,<1"
+]
+
+[project]
+dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.34,<1"]
+description = "Price interval touch probability research"
+name = "pripre"
+requires-python = ">=3.12,<3.13"
+version = "0.1.0"
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend/src/pripre"]
+
+[tool.mypy]
+files = ["backend/src", "backend/tests", "scripts"]
+python_version = "3.12"
+strict = true
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers"
+testpaths = ["backend/tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "UP"]
+
+[tool.tomlsort]
+all = true
