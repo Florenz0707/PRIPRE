@@ -112,11 +112,11 @@ def test_clock_http_timeout_bounds_the_underlying_blocking_read(
 
     timeouts: list[float] = []
 
-    def timeout_read(_request: Request, *, timeout: float) -> NoReturn:
+    def timeout_read(_opener: object, _request: Request, *, timeout: float) -> NoReturn:
         timeouts.append(timeout)
         raise TimeoutError("simulated unavailable clock endpoint")
 
-    monkeypatch.setattr("urllib.request.urlopen", timeout_read)
+    monkeypatch.setattr("urllib.request.OpenerDirector.open", timeout_read)
     reader = PublicHTTP(DownloadBudget(2, 1024), min_interval=0, timeout=2)
     for _ in range(2):
         with pytest.raises(DownloadError):

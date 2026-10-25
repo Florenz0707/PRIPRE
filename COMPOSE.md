@@ -110,3 +110,58 @@ docker compose -p pripre down
 本次修复在隔离 worktree 的 `idle` 集成，主目录 `dev` 按协作约束不自动合并。运行实例若由该 worktree 的验证镜像更新，之后从 `dev` 执行 `--build` 前，应先按分支流程合入修复，防止重新构建旧代码。保留当前本地配置、数据目录及 `.env`；新增校时参数可省略以采用默认值。
 
 2026-10-25 的时钟修复已更新至当前 `pripre-dev` 实例（`127.0.0.1:8020`），沿用 `/home/florenz/PRIPRE/data`。运行配置从原容器保留，新增参数使用后端默认值；主目录 `dev` 未自动合并。旧镜像保留为 `pripre-clockfix-backend:before-20261025` 和 `pripre-clockfix-frontend:before-20261025`。已打开的页面须刷新以加载新前端；仅后端更新不足以修复旧页面中的固定 UTC 锚点逻辑。
+
+## 数据源代理与 Docker 网络
+
+代理只注入 `backend` 的 `PRIPRE_SOURCE_PROXY`，不为前端、健康检查或本地 API 设置全局 HTTP 代理。保留默认 bridge 网络及 `backend` 服务名解析，不切换到 host 网络。该设置是运行期数据源代理，与 Docker daemon 拉镜像、BuildKit 下载依赖的代理配置分开。
+
+在本地、未提交的 `.env` 中配置，然后重新创建后端（单纯 restart 不会加载新环境变量）：
+
+```dotenv
+PRIPRE_SOURCE_PROXY=http://host.docker.internal:7077
+```
+
+### Docker Desktop（包括当前实例）
+
+Docker Desktop 自带 `host.docker.internal`，当前环境已经验证容器能够连接其 7077 端口。直接使用上述地址，**不要叠加**原生 Linux 的 `host-gateway` 覆盖文件，避免覆盖 Docker Desktop 的宿主机 DNS 路由。
+
+```bash
+docker compose up -d --build --wait
+docker compose exec backend /app/.venv/bin/python -m pripre.cli source-check --config config/config.toml
+```
+
+若代理运行在 Windows，而项目运行在 WSL，不能仅把 WSL 终端的 `127.0.0.1` 原样写入容器；应从容器验证 Docker Desktop 宿主机地址对应的端口。代理自身的分流规则决定最终出口，本项目不修改它的规则。
+
+### 原生 Linux Docker Engine
+
+原生 Linux 可叠加已提供的映射文件：
+
+```bash
+docker compose -f compose.yaml -f deploy/compose.proxy-host.yaml up -d --build --wait
+docker compose -f compose.yaml -f deploy/compose.proxy-host.yaml exec backend /app/.venv/bin/python -m pripre.cli source-check --config config/config.toml
+```
+
+它仅为后端添加 `host.docker.internal:host-gateway`。代理须监听 Docker 可达的宿主机地址；只监听 `127.0.0.1` 的 Linux 宿主机代理，不能仅靠这个映射从 bridge 容器访问。按实际网络绑定代理的 bridge 地址并限制可访问范围，本项目不自动修改代理监听或宿主机防火墙。
+
+若代理本身是另一个容器，将双方加入同一 Docker 网络，并填写 `http://代理服务名:容器内端口`，使用服务名而不是容器 IP 或宿主机发布端口。无需将应用切换到 host 网络，也无需为占位架构增加代理中间件。
+
+### 认证、直连和验证边界
+
+需要认证时可在本机 `.env` 使用 `http://用户名:密码@代理地址:端口`，特殊字符需 URL 编码；不要提交或在聊天、日志中粘贴凭据。环境变量会存在于容器配置中，拥有 Docker 管理权限的账户仍可读取它。`docker compose config --quiet` 可检查配置而不打印展开后的代理值。
+
+清空 `PRIPRE_SOURCE_PROXY` 并重新创建后端即可恢复显式直连。`/api/health` 成功只表示本地服务正常；应使用 `source-check` 确认 HTTP 和 WebSocket 均成功，实时矩阵仍需经过行情预热。该检查不代表归档一定已发布、历史数据完整或概率准确。
+
+官方参考：[Docker Compose 网络](https://docs.docker.com/compose/how-tos/networking/)、[Docker Desktop 宿主机访问](https://docs.docker.com/desktop/features/networking/networking-how-tos/)、[websockets 显式代理配置](https://websockets.readthedocs.io/en/stable/topics/proxies.html)。
+
+若源返回 418/-1003，表示该出口被 Binance 自动封禁，应遵守 `Retry-After`，不能靠重试或静默直连绕过。具体含义见 [Binance 官方 HTTP 状态说明](https://developers.binance.com/en/docs/products/spot/rest-api)。更换节点还需确认该域名的分流规则确实采用新出口；项目不自动修改共享代理的节点与规则。
+
+原生 Docker Engine 若运行在 WSL，而代理运行在 Windows，`host-gateway` 只代表 Docker Engine 所在宿主网络，不保证对应 Windows。应填写并验证容器实际可达的 Windows 地址，不能套用 Docker Desktop 的拓扑。
+
+本次为 `pripre-dev` 准备了隔离 worktree 中的私有配置 `.env.pripre-dev`（权限 0600，Git 与镜像构建均忽略），目标为 `http://host.docker.internal:7077`。目前真实 REST 检查仍返回 418，因此尚未将此配置用于 8020 运行实例。出口可用后，先在代理功能分支的工作目录用以下命令验证，再执行部署：
+
+```bash
+# 不启动依赖服务，不下载历史数据，只检查一次 HTTP 和一次 WebSocket
+docker compose --env-file .env.pripre-dev -p pripre-proxy-acceptance run --rm --no-deps backend /app/.venv/bin/python -m pripre.cli source-check --config config/config.toml
+# 确认 http_ok 与 websocket_ok 都为 true 后，再更新现有实例
+docker compose --env-file .env.pripre-dev -p pripre-dev up -d --build --wait
+```

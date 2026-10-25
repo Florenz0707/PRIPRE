@@ -4,7 +4,7 @@ import asyncio
 import json
 import re
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from decimal import Decimal
 from typing import Protocol
 from urllib.parse import urlencode
@@ -12,10 +12,12 @@ from urllib.parse import urlencode
 from pydantic import BaseModel, ConfigDict, Field
 from websockets.asyncio.client import connect
 
+from pripre.data.proxy import SourceProxy
 from pripre.data.source import Capabilities, TradeBatch
 from pripre.domain import Coverage, Instrument, Trade
 
 REST_BASE = "https://data-api.binance.vision/api/v3"
+STREAM_BASE = "wss://data-stream.binance.vision"
 ARCHIVE_BASE = "https://data.binance.vision/data/spot"
 
 
@@ -46,9 +48,12 @@ class BinanceSource:
     id = "binance"
     capabilities = Capabilities(historical_trades=True, live_trades=True)
 
-    def __init__(self, instrument: Instrument, http: HTTPReader) -> None:
+    def __init__(
+        self, instrument: Instrument, http: HTTPReader, proxy: SourceProxy | None = None
+    ) -> None:
         self.instrument = instrument
         self.http = http
+        self.proxy = proxy if proxy is not None else SourceProxy.from_environment()
 
     def parse(self, payload: object) -> Trade:
         record = AggregateRecord.model_validate(payload)
@@ -116,11 +121,13 @@ class BinanceSource:
             raise ValueError("invalid Binance server clock response")
         return timestamp_us(payload["serverTime"])
 
-    async def stream(self, symbol: str) -> AsyncIterator[Trade]:
+    async def stream(self, symbol: str) -> AsyncGenerator[Trade, None]:
         # A disconnect ends this iterator. The caller marks a gap before reconnecting.
         require_symbol(symbol)
-        url = f"wss://data-stream.binance.vision/ws/{symbol.lower()}@aggTrade?timeUnit=MICROSECOND"
-        async with connect(url, open_timeout=10, close_timeout=3, max_size=65536) as socket:
+        url = f"{STREAM_BASE}/ws/{symbol.lower()}@aggTrade?timeUnit=MICROSECOND"
+        async with connect(
+            url, proxy=self.proxy.url, open_timeout=10, close_timeout=3, max_size=65536
+        ) as socket:
             async for message in socket:
                 payload: object = json.loads(message)
                 if not isinstance(payload, dict) or payload.get("s") != symbol:

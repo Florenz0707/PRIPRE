@@ -8,6 +8,7 @@ services:
     environment:
       PRIPRE_CONFIG: /app/config/config.toml
       PRIPRE_LIVE_ENABLED: '${PRIPRE_LIVE_ENABLED:-false}'
+      PRIPRE_SOURCE_PROXY: '${PRIPRE_SOURCE_PROXY:-}'
     user: '${PRIPRE_UID:-1000}:${PRIPRE_GID:-1000}'
     volumes:
       - type: bind

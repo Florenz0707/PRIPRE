@@ -181,3 +181,21 @@ Linux 下使用 `CLOCK_MONOTONIC_RAW` 外推 Binance UTC，并用相同的原始
 `[runtime].clock_sync_seconds` 默认为 30，`clock_max_age_seconds` 默认为 90，后者必须大于前者。每轮最多三次公共时间请求，底层 HTTP 超时为 2 秒、每次异步等待最多 3 秒，避免已取消的阻塞读取长期占用校时请求锁；选择 RTT 不超过 2 秒的最低延迟样本。短暂复校失败保留尚未过期的校准；超过有效期暂停概率、清空特征缓冲，恢复后重新预热。超过 500 ms 的时间修正也会重新预热，并丢弃修正前尚未完成或排队的预测。
 
 快照包含 `elapsed_clock`、`clock_sync_age_ms`、`clock_syncs`、`clock_sync_failures`、`clock_adjustment_us`、`clock_epoch` 供诊断。WebSocket 使用 `stream_id`、`frame_sequence`、`frame_elapsed_us` 及服务端计算的 `frame_age_ms` 判断推送进度与排队时长；前端不再把 UTC 与浏览器时钟长期固定对齐。重复帧不刷新时效，断推送、突发传输延迟或排队超过约 3.5 秒仍会清除矩阵并重新订阅。渐进网络延迟与首次连接前的网络缓存无法仅靠两端独立时钟精确测量，此检查不是端到端绝对延迟证明。
+
+### 数据源代理
+
+使用专用环境变量 `PRIPRE_SOURCE_PROXY`，同时控制历史归档、REST 成交、源时间校准和实时 WebSocket。支持 HTTP 代理（包括带账号密码的 HTTP CONNECT）；HTTPS/WSS 目标继续执行原有 TLS 证书校验。SOCKS 和到代理本身的 HTTPS 协议暂不接受，错误配置会明确报错。
+
+```bash
+# 在宿主机运行 CLI：填写宿主机可访问的代理地址
+PRIPRE_SOURCE_PROXY=http://127.0.0.1:7077 uv run --locked python -m pripre.cli source-check --config config/config.toml
+PRIPRE_SOURCE_PROXY=http://127.0.0.1:7077 uv run --locked python -m pripre.cli collect --config config/config.toml
+```
+
+留空表示显式直连。数据源客户端不再自动继承 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 或 `NO_PROXY`，避免 HTTP 与 WebSocket 走不同出口；指定代理失败时不会偷偷回退直连。CLI 不自动读取 `.env`，需导出变量或使用上面的命令前缀。
+
+`source-check` 是手动触发的连通性检查：最多一次 HTTP 时间请求（64 KiB 预算）及一次 WebSocket 订阅，只读取一条成交后关闭，失败退出码为 1。不下载历史数据、不生成预测，也不在服务启动时自动执行。输出区分 HTTP 和 WebSocket，并移除代理地址中的账号密码；`/api/config` 仅返回 `network.source_proxy_enabled` 标志。代理配置不写入研究报告或模型指纹。
+
+Docker 使用的地址与宿主机 CLI 不同：Docker Desktop 通常填写 `http://host.docker.internal:7077`；原生 Linux 的宿主机路由见 COMPOSE.md。容器内的 `127.0.0.1` 指容器自身。
+
+数据源返回 418/429 时，HTTP 客户端会遵守数值形式的 `Retry-After`（缺失或无效时等待 60 秒），冷却期间不再发送 HTTP 请求。`source-check` 返回状态码与等待秒数；切换代理出口后重新运行检查，运行服务需重建或重启后端以清除原出口的冷却状态。

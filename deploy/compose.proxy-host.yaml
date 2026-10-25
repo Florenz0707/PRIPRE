@@ -1,0 +1,5 @@
+# Native Linux only. Docker Desktop already provides host.docker.internal via its DNS.
+services:
+  backend:
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'

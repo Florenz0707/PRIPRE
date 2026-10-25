@@ -22,6 +22,7 @@ from pripre.data.binance import (
     timestamp_us,
 )
 from pripre.data.http import DownloadBudget, DownloadError, PublicHTTP
+from pripre.data.proxy import SourceProxy
 from pripre.data.store import load_batch, save_batch, write_json
 
 
@@ -104,8 +105,9 @@ def collect_history(config: AppConfig) -> dict[str, object]:
         int(previous.get("requests", 0)),
         int(previous.get("downloaded_bytes", 0)),
     )
-    http = PublicHTTP(budget)
-    source = BinanceSource(config.instrument, http)
+    proxy = SourceProxy.from_environment()
+    http = PublicHTTP(budget, proxy=proxy)
+    source = BinanceSource(config.instrument, http, proxy=proxy)
     completed: list[str] = []
     gaps: list[dict[str, str]] = []
     result: dict[str, object] = {

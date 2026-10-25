@@ -2,6 +2,14 @@
 
 ## 未发布
 
+### 🆕 数据源代理
+
+- 增加专用 `PRIPRE_SOURCE_PROXY` HTTP CONNECT 代理，统一覆盖历史 HTTP、校时与实时 WebSocket；留空直连，配置失败不自动绕过代理。
+- 凭据不进入 API 配置、研究报告或异常消息；增加手动 `source-check` 双链路检查。
+- Compose 仅向后端注入代理，保留 bridge 网络；原生 Linux 使用可选 host-gateway 文件，Docker Desktop 保留内置宿主机 DNS。
+- 本地代理集成测试覆盖认证、CONNECT、全局代理/NO_PROXY 隔离及失败不直连。
+- 识别数据源 418/429 与 Retry-After，冷却期间不重复请求，并在连通性检查中报告状态码。
+
 ### 🐛 修复运行数分钟后误报行情过期
 
 - 源 UTC、校时 RTT、计算耗时和更新周期改用 Linux 原始单调时钟，避免受系统时钟调速影响。

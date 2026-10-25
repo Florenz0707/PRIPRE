@@ -16,6 +16,7 @@ from pripre.backtesting.queries import filtered_report, replay_detail, replay_pa
 from pripre.config import AppConfig, RuntimeConfig, load_config
 from pripre.data.binance import BinanceSource
 from pripre.data.http import DownloadBudget, PublicHTTP
+from pripre.data.proxy import SourceProxy
 from pripre.data.source import SourceRegistry
 from pripre.journal import PredictionJournal
 from pripre.runtime import MatrixRuntime
@@ -38,6 +39,7 @@ def create_app(config: AppConfig | None = None, runtime: MatrixRuntime | None = 
         settings = settings.model_copy(
             update={"runtime": RuntimeConfig.model_validate(runtime_values)}
         )
+    proxy = SourceProxy.from_environment()
     if runtime is None:
         source = None
         journal = None
@@ -45,7 +47,9 @@ def create_app(config: AppConfig | None = None, runtime: MatrixRuntime | None = 
         if settings.runtime.live_enabled:
             registry = SourceRegistry()
             binance = BinanceSource(
-                settings.instrument, PublicHTTP(DownloadBudget(1_000_000, 64 * 1048576), timeout=2)
+                settings.instrument,
+                PublicHTTP(DownloadBudget(1_000_000, 64 * 1048576), timeout=2, proxy=proxy),
+                proxy=proxy,
             )
             registry.register(binance, settings.instrument, settings.source.symbol)
             clock_sync = binance.server_time
@@ -73,7 +77,10 @@ def create_app(config: AppConfig | None = None, runtime: MatrixRuntime | None = 
 
     @app.get("/api/config")
     def configuration() -> dict[str, object]:
-        return settings.model_dump(mode="json")
+        return {
+            **settings.model_dump(mode="json"),
+            "network": {"source_proxy_enabled": proxy.enabled},
+        }
 
     @app.get("/api/matrix")
     async def matrix() -> dict[str, object]:
