@@ -160,5 +160,6 @@ uv run --locked python scripts/check.py
 - 实际源检查：原出口返回 REST 418/-1003，遵守 Retry-After 后第一次切换节点仍有约 6 秒 REST 延迟，105.51 秒隔离观察出现 3 次复校失败及校时失效。第二次切换后 `source-check` 的 HTTP 与 WebSocket 均成功（一次 HTTP、31 字节及一条真实成交）；没有绕过代理。
 - 实时复核：第二个新出口在独立数据目录观察 135.37 秒，共 131 帧（预热 56、有效预测 75），成功校时计数由 1 增至 5，失败、缺口、重连均为 0，结束时 ready。保留 RTT 不超过 2 秒与校准有效期 90 秒的保护，没有放宽门槛。该短窗口不能证明长期零暂停。
 - 部署：使用已验证镜像更新 `pripre-dev` 的 8020 实例，代理为 `http://host.docker.internal:7077`；仍沿用 `/home/florenz/PRIPRE/data`。旧镜像保留为 `pripre-dev-backend:before-proxy-20261025` 与 `pripre-dev-frontend:before-proxy-20261025`。临时验收容器停止，未下载或覆盖历史数据，主目录 dev 保留。
+- 部署后另观察 100.22 秒，50 次采样为 ready 31、warming_up 18、stale 1，最终成功校时 3 次、失败 1 次、校准年龄 25.84 秒；有一次超时后下一轮恢复，没有出现 clock_unavailable、缺口或重连。“零复校失败”的严格诊断断言未通过，不能将其描述为零失败；现有有效期保护内的复校恢复已核实；另有一次成交过期暂停，随后恢复。持续零暂停验收未通过，出口仍有偶发延迟，功能分支暂未合并 idle。
 
 检查结果位于本地 `data/diagnostics/source-proxy-20261025/`。这项工作不改变概率算法、历史研究数据或校准结论。
