@@ -77,7 +77,7 @@ def create_app(config: AppConfig | None = None, runtime: MatrixRuntime | None = 
 
     @app.get("/api/matrix")
     async def matrix() -> dict[str, object]:
-        return service.snapshot
+        return service.for_delivery(service.snapshot)
 
     @app.get("/api/research")
     def research(start: date | None = None, end: date | None = None) -> dict[str, object]:
@@ -150,7 +150,7 @@ def create_app(config: AppConfig | None = None, runtime: MatrixRuntime | None = 
         await socket.accept()
         try:
             while True:
-                await socket.send_json(await queue.get())
+                await socket.send_json(service.for_delivery(await queue.get()))
         except (WebSocketDisconnect, RuntimeError):
             pass
         finally:

@@ -21,6 +21,8 @@ quote = "USDT"
 tick_size = "0.01"
 
 [runtime]
+clock_max_age_seconds = 90
+clock_sync_seconds = 30
 live_enabled = false
 max_clients = 50
 paths = 512

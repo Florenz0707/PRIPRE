@@ -1,6 +1,8 @@
 import { ref } from 'vue'
 import { parseSnapshot, type Snapshot } from './api'
 
+const expiryMs = 3500
+
 export function createLiveConnection() {
   const snapshot = ref<Snapshot | null>(null)
   const connected = ref(false)
@@ -8,73 +10,100 @@ export function createLiveConnection() {
   let reconnect: ReturnType<typeof setTimeout> | undefined
   let expiry: ReturnType<typeof setTimeout> | undefined
   let stopped = false
-  let anchor: { timestamp: number; elapsed: number } | undefined
+  let progress:
+    | { stream?: string; sequence: number; generated: number; received: number }
+    | undefined
+
+  function expire() {
+    snapshot.value = {
+      status: 'connection_stale',
+      timestamp_us: snapshot.value?.timestamp_us ?? 0,
+      probabilities: null,
+    }
+    // Reopen the subscription to discard any old transport backlog.
+    socket?.close()
+  }
 
   function connect() {
     if (stopped) return
-    anchor = undefined
-    socket = new WebSocket(
+    progress = undefined
+    const current = new WebSocket(
       `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/stream`,
     )
-    socket.onopen = () => {
-      connected.value = true
+    socket = current
+    current.onopen = () => {
+      if (!stopped && socket === current) connected.value = true
     }
-    socket.onmessage = (event) => {
+    current.onmessage = (event) => {
+      if (stopped || socket !== current) return
       try {
         const next = parseSnapshot(JSON.parse(String(event.data)))
-        const elapsed = performance.now()
-        if (
-          Number.isFinite(next.timestamp_us) &&
-          (!anchor || next.status !== 'ready')
-        ) {
-          anchor = { timestamp: next.timestamp_us, elapsed }
+        const received = performance.now()
+        const stream = next.stream_id
+        // Legacy servers use UTC only to detect progress, never as a fixed local-time anchor.
+        const sequence = next.frame_sequence ?? next.timestamp_us
+        const generated = next.frame_elapsed_us ?? next.timestamp_us
+        const age = next.frame_age_ms ?? 0
+        if (age > expiryMs) {
+          expire()
+          return
         }
-        const age = anchor
-          ? (anchor.timestamp +
-              (elapsed - anchor.elapsed) * 1000 -
-              next.timestamp_us) /
-            1000
-          : 0
-        snapshot.value =
-          next.status === 'ready' && (!Number.isFinite(age) || age > 3500)
-            ? {
-                status: 'connection_stale',
-                timestamp_us: next.timestamp_us,
-                probabilities: null,
-              }
-            : next
-        if (expiry) clearTimeout(expiry)
-        expiry = setTimeout(() => {
-          snapshot.value = {
-            status: 'connection_stale',
-            timestamp_us: Date.now() * 1000,
-            probabilities: null,
+        if (!stream && next.status !== 'ready') progress = undefined
+        if (progress && progress.stream === stream) {
+          if (
+            sequence <= progress.sequence ||
+            generated <= progress.generated
+          ) {
+            if (received - progress.received >= expiryMs) expire()
+            return // Repeated frames must not renew the expiry timer.
           }
-        }, 3500)
+          const delayed =
+            received -
+            progress.received -
+            (generated - progress.generated) / 1000
+          if (delayed + age > expiryMs) {
+            expire()
+            return
+          }
+        }
+        progress = { stream, sequence, generated, received }
+        snapshot.value = next
+        if (expiry) clearTimeout(expiry)
+        expiry = setTimeout(expire, expiryMs - age)
       } catch {
         snapshot.value = {
           status: 'invalid_response',
-          timestamp_us: Date.now() * 1000,
+          timestamp_us: snapshot.value?.timestamp_us ?? 0,
+          probabilities: null,
+        }
+        current.close()
+      }
+    }
+    current.onclose = () => {
+      if (socket !== current) return
+      connected.value = false
+      if (expiry) clearTimeout(expiry)
+      socket = undefined
+      if (stopped) return
+      if (
+        !['connection_stale', 'invalid_response'].includes(
+          snapshot.value?.status ?? '',
+        )
+      ) {
+        snapshot.value = {
+          status: 'connection_lost',
+          timestamp_us: snapshot.value?.timestamp_us ?? 0,
           probabilities: null,
         }
       }
+      reconnect = setTimeout(connect, 3000)
     }
-    socket.onclose = () => {
-      connected.value = false
-      snapshot.value = {
-        status: 'connection_lost',
-        timestamp_us: Date.now() * 1000,
-        probabilities: null,
-      }
-      if (!stopped) reconnect = setTimeout(connect, 3000)
-    }
-    socket.onerror = () => {
-      socket?.close()
-    }
+    current.onerror = () => current.close()
   }
 
   function stop() {
     stopped = true
+    connected.value = false
     if (reconnect) clearTimeout(reconnect)
     if (expiry) clearTimeout(expiry)
     socket?.close()

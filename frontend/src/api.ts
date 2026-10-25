@@ -11,6 +11,10 @@ export interface Grid {
   windows: { start_us: number; end_us: number }[]
 }
 export interface Snapshot {
+  stream_id?: string
+  frame_sequence?: number
+  frame_elapsed_us?: number
+  frame_age_ms?: number
   status: string
   timestamp_us: number
   reference_price?: string | null
@@ -157,6 +161,24 @@ export function parseSnapshot(value: unknown): Snapshot {
     throw new Error('Invalid matrix response')
   }
   const frame = value as Snapshot
+  if (
+    ['stream_id', 'frame_sequence', 'frame_elapsed_us', 'frame_age_ms'].some(
+      (key) => key in frame,
+    )
+  ) {
+    if (
+      typeof frame.stream_id !== 'string' ||
+      !frame.stream_id ||
+      !Number.isSafeInteger(frame.frame_sequence) ||
+      (frame.frame_sequence ?? -1) < 0 ||
+      !Number.isSafeInteger(frame.frame_elapsed_us) ||
+      (frame.frame_elapsed_us ?? -1) < 0 ||
+      !Number.isFinite(frame.frame_age_ms) ||
+      (frame.frame_age_ms ?? -1) < 0
+    ) {
+      throw new Error('Invalid frame freshness metadata')
+    }
+  }
   if (frame.status === 'ready') {
     if (
       !frame.grid ||

@@ -102,3 +102,9 @@ docker compose -p pripre down
 新版 backtest 同时生成 `research/report.json` 及 `research/runs/<run_id>/replay.npz`，experiments 生成 `research/experiments.json`。部署使用原有数据目录挂载，无须新增中间件。更新镜像后显式执行 backtest 才能使用历史复盘；仅重启后端不会自动生成或覆盖离线报告。
 
 备份和恢复必须包含完整的 `research/` 子目录，保持报告与其运行 ID 对应的冻结证据一致；仅恢复 report.json 会导致日期指标和复盘接口不可用。旧运行不会自动删除。日常暂停可使用 `docker compose -p pripre stop`，保留容器与全部宿主机数据。
+
+## 时钟漂移修复的部署检查
+
+前后端应一起更新镜像，让前端使用新增的帧进度字段。宿主机时钟和 NTP 配置不需要由本项目修改。升级后检查 `/api/matrix` 中 `elapsed_clock` 为 `monotonic_raw`、`clock_syncs` 持续增加、`clock_sync_age_ms` 周期回落；超过校准有效期时应显示校时失效而不是有效概率。
+
+本次修复在隔离 worktree 的 `idle` 集成，主目录 `dev` 按协作约束不自动合并。运行实例若由该 worktree 的验证镜像更新，之后从 `dev` 执行 `--build` 前，应先按分支流程合入修复，防止重新构建旧代码。保留当前本地配置、数据目录及 `.env`；新增校时参数可省略以采用默认值。

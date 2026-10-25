@@ -24,7 +24,7 @@ def trade(price: str, seconds: int) -> Trade:
 
 
 def test_defaults_and_toml_agree() -> None:
-    config = load_config(Path("config/config.toml"))
+    config = load_config(Path("config/config.example.toml"))
     assert config == AppConfig()
     grid = config.grid.build(Decimal("10000"), 0)
     assert len(grid.prices) == 21 and len(grid.windows) == 35

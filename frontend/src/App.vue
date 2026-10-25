@@ -19,6 +19,7 @@ const statusLabels: Record<string, string> = {
   disconnected: '行情连接中或已中断',
   warming_up: '正在积累 60 秒连续行情',
   stale: '行情已过期，矩阵暂停',
+  clock_unavailable: '行情校时已失效，矩阵暂停',
   model_unavailable: '模型尚未就绪，请检查本地样本',
   ready: '实时概率矩阵',
   out_of_distribution: '波动超出训练范围，矩阵暂停',

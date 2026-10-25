@@ -97,6 +97,14 @@ class RuntimeConfig(BaseModel):
     paths: int = Field(default=512, ge=64, le=4096)
     seed: int = Field(default=2026, ge=0)
     live_enabled: bool = False
+    clock_sync_seconds: int = Field(default=30, ge=5, le=300)
+    clock_max_age_seconds: int = Field(default=90, ge=10, le=900)
+
+    @model_validator(mode="after")
+    def clock_intervals(self) -> Self:
+        if self.clock_max_age_seconds <= self.clock_sync_seconds:
+            raise ValueError("clock max age must exceed clock synchronization interval")
+        return self
 
 
 class ResearchConfig(BaseModel):

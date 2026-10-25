@@ -3,16 +3,16 @@
 import asyncio
 import logging
 import sqlite3
-import time
 from collections import deque
 from collections.abc import Awaitable, Callable
 from decimal import Decimal
 from typing import Protocol
+from uuid import uuid4
 
 import numpy as np
 from websockets.exceptions import WebSocketException
 
-from pripre.clock import ClockSample, MonotonicUTC
+from pripre.clock import RAW_CLOCK, ClockSample, MonotonicUTC, steady_ns, wait_until
 from pripre.config import AppConfig
 from pripre.data.http import DownloadError
 from pripre.data.source import MarketSource
@@ -38,13 +38,27 @@ class MatrixRuntime:
         clock: Callable[[], int] | None = None,
         clock_sync: Callable[[], Awaitable[int]] | None = None,
         journal: PredictionJournal | None = None,
+        elapsed_ns: Callable[[], int] | None = None,
     ) -> None:
         self.config = config
         self.source = source
         self.engine = engine
         if clock is not None and clock_sync is not None:
             raise ValueError("choose either an injected clock or a source clock synchronizer")
-        self._utc = MonotonicUTC()
+        self._elapsed_ns = elapsed_ns or steady_ns
+        self._utc = MonotonicUTC(monotonic_ns=self._elapsed_ns)
+        self.elapsed_clock = (
+            "injected" if elapsed_ns else "monotonic_raw" if RAW_CLOCK is not None else "monotonic"
+        )
+        self.stream_id = uuid4().hex
+        self._frame_sequence = 0
+        self.clock_epoch = 0
+        self.clock_syncs = 0
+        self.clock_sync_failures = 0
+        self.clock_adjustment_us: int | None = None
+        self._last_clock_sync_ns: int | None = None
+        self._clock_usable = False
+        self._clock_lock = asyncio.Lock()
         self.clock = clock or self._utc
         self._clock_sync = clock_sync
         self.clock_uncertainty_us: int | None = None
@@ -58,7 +72,14 @@ class MatrixRuntime:
         self.computations = 0
         self._tasks: list[asyncio.Task[None]] = []
         self._clients: set[asyncio.Queue[dict[str, object]]] = set()
-        self.snapshot: dict[str, object] = {"status": "starting", "probabilities": None}
+        self.snapshot: dict[str, object] = {
+            "status": "starting",
+            "probabilities": None,
+            "timestamp_us": self.clock(),
+            "stream_id": self.stream_id,
+            "frame_sequence": 0,
+            "frame_elapsed_us": self._elapsed_ns() // 1000,
+        }
 
     @property
     def clients(self) -> int:
@@ -71,6 +92,8 @@ class MatrixRuntime:
                 self._tasks.append(asyncio.create_task(self._prepare()))
             if self.source is not None:
                 self._tasks.append(asyncio.create_task(self._feed()))
+            if self._clock_sync is not None:
+                self._tasks.append(asyncio.create_task(self._clock_loop()))
 
     async def stop(self) -> None:
         for task in self._tasks:
@@ -90,6 +113,8 @@ class MatrixRuntime:
         self.trades.clear()
 
     def ingest(self, trade: Trade) -> None:
+        if not self._clock_trusted():
+            return
         now = self.clock()
         if (
             trade.instrument != self.config.instrument.id
@@ -121,22 +146,87 @@ class MatrixRuntime:
             self.gaps += 1
             self.disconnect()
 
+    def _clock_trusted(self) -> bool:
+        if self._clock_sync is None:
+            return True
+        age = (
+            self._elapsed_ns() - self._last_clock_sync_ns
+            if self._last_clock_sync_ns is not None
+            else None
+        )
+        if age is None or age > self.config.runtime.clock_max_age_seconds * 1_000_000_000:
+            if self._clock_usable:
+                self.clock_epoch += 1
+                self._clock_usable = False
+                self.disconnect()
+            return False
+        return self._clock_usable
+
+    async def resynchronize_clock(self) -> None:
+        if self._clock_sync is None:
+            return
+        async with self._clock_lock:
+            samples: list[ClockSample] = []
+            for _ in range(3):
+                start_ns = self._elapsed_ns()
+                try:
+                    source_us = await asyncio.wait_for(self._clock_sync(), timeout=3)
+                    samples.append(ClockSample(source_us, start_ns, self._elapsed_ns()))
+                except (OSError, ValueError, DownloadError, TimeoutError):
+                    continue
+            before = self._utc()
+            trusted = self._clock_trusted()
+            try:
+                uncertainty = self._utc.synchronize_samples(samples)
+            except ValueError:
+                self.clock_sync_failures += 1
+                raise
+            self.clock_adjustment_us = self._utc() - before
+            # Large corrections invalidate the entire feature window, including in-flight inference.
+            if not trusted or abs(self.clock_adjustment_us) > 500_000:
+                self.clock_epoch += 1
+                self.disconnect()
+            self.clock_uncertainty_us = uncertainty
+            self._last_clock_sync_ns = self._utc.sampled_at_ns
+            self._clock_usable = True
+            self.clock_syncs += 1
+
+    async def _clock_loop(self) -> None:
+        while True:
+            await wait_until(
+                self._elapsed_ns() + self.config.runtime.clock_sync_seconds * 1_000_000_000,
+                self._elapsed_ns,
+            )
+            try:
+                await self.resynchronize_clock()
+            except (OSError, ValueError, DownloadError):
+                logger.warning(
+                    "Source clock synchronization failed; retaining only unexpired calibration"
+                )
+
+    def for_delivery(self, payload: dict[str, object]) -> dict[str, object]:
+        """Attach server-side queue age without reusing source UTC as a transport timer."""
+        result = dict(payload)
+        elapsed = payload.get("frame_elapsed_us")
+        result["frame_age_ms"] = (
+            max(0.0, (self._elapsed_ns() / 1000 - elapsed) / 1000)
+            if isinstance(elapsed, int)
+            else 0.0
+        )
+        if payload.get("status") == "ready":
+            if not self._clock_trusted():
+                result.update(status="clock_unavailable", probabilities=None)
+            elif payload.get("clock_epoch") != self.clock_epoch:
+                result.update(status="warming_up", probabilities=None)
+        return result
+
     async def _feed(self) -> None:
         if self.source is None:
             return
         delay = 1
         while True:
             try:
-                if self._clock_sync is not None:
-                    samples: list[ClockSample] = []
-                    for _ in range(3):
-                        start_ns = time.monotonic_ns()
-                        try:
-                            source_us = await self._clock_sync()
-                            samples.append(ClockSample(source_us, start_ns, time.monotonic_ns()))
-                        except (OSError, ValueError, DownloadError):
-                            continue
-                    self.clock_uncertainty_us = self._utc.synchronize_samples(samples)
+                await self.resynchronize_clock()
                 async for trade in self.source.stream(self.config.source.symbol):
                     self.ingest(trade)
                     delay = 1
@@ -162,6 +252,13 @@ class MatrixRuntime:
         self._clients.discard(queue)
 
     def _publish(self, payload: dict[str, object]) -> dict[str, object]:
+        self._frame_sequence += 1
+        payload.update(stream_id=self.stream_id, frame_sequence=self._frame_sequence)
+        if payload.get("status") == "ready":
+            if not self._clock_trusted():
+                payload.update(status="clock_unavailable", probabilities=None)
+            elif payload.get("clock_epoch") != self.clock_epoch:
+                payload.update(status="warming_up", probabilities=None)
         self.snapshot = payload
         for queue in self._clients:
             if queue.full():
@@ -170,10 +267,21 @@ class MatrixRuntime:
         return payload
 
     async def tick(self) -> dict[str, object]:
+        trusted = self._clock_trusted()
+        epoch = self.clock_epoch
         now = self.clock()
         last = self.trades[-1] if self.trades else None
         payload: dict[str, object] = {
             "timestamp_us": now,
+            "frame_elapsed_us": self._elapsed_ns() // 1000,
+            "elapsed_clock": self.elapsed_clock,
+            "clock_epoch": epoch,
+            "clock_syncs": self.clock_syncs,
+            "clock_sync_failures": self.clock_sync_failures,
+            "clock_adjustment_us": self.clock_adjustment_us,
+            "clock_sync_age_ms": (self._elapsed_ns() - self._last_clock_sync_ns) / 1_000_000
+            if self._last_clock_sync_ns is not None
+            else None,
             "instrument": self.config.instrument.id,
             "source": self.config.source.provider,
             "probabilities": None,
@@ -193,6 +301,8 @@ class MatrixRuntime:
         }
         if not self.config.runtime.live_enabled:
             payload["status"] = "disabled"
+        elif not trusted:
+            payload["status"] = "clock_unavailable"
         elif not self.connected or last is None:
             payload["status"] = "disconnected"
         elif now - last.timestamp_us > self.config.runtime.stale_seconds * 1_000_000:
@@ -203,7 +313,7 @@ class MatrixRuntime:
             payload["status"] = "model_unavailable"
         else:
             history = tuple(self.trades)
-            start = time.perf_counter()
+            start = self._elapsed_ns()
             try:
                 volatility = trailing_volatility(history, now)
                 forecast = await asyncio.to_thread(self.engine.predict, last.price, now, volatility)
@@ -214,11 +324,14 @@ class MatrixRuntime:
                     or np.any((matrix < 0) | (matrix > 1))
                 ):
                     raise ValueError("estimator returned an invalid probability matrix")
-                elapsed = (time.perf_counter() - start) * 1000
+                elapsed = (self._elapsed_ns() - start) / 1_000_000
                 self.computations += 1
                 # Feed can disconnect or advance through a gap while inference runs in its thread.
-                if (
-                    not self.connected
+                if not self._clock_trusted():
+                    payload["status"] = "clock_unavailable"
+                elif (
+                    epoch != self.clock_epoch
+                    or not self.connected
                     or self.coverage_start_us is None
                     or self.coverage_start_us > now - 60_000_000
                 ):
@@ -255,8 +368,10 @@ class MatrixRuntime:
 
     async def _ticker(self) -> None:
         while True:
-            start = time.monotonic()
+            start = self._elapsed_ns()
             await self.tick()
-            await asyncio.sleep(
-                max(0.01, self.config.runtime.update_seconds - (time.monotonic() - start))
+            deadline = max(
+                start + self.config.runtime.update_seconds * 1_000_000_000,
+                self._elapsed_ns() + 10_000_000,
             )
+            await wait_until(deadline, self._elapsed_ns)
