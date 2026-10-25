@@ -45,7 +45,7 @@ def create_app(config: AppConfig | None = None, runtime: MatrixRuntime | None = 
         if settings.runtime.live_enabled:
             registry = SourceRegistry()
             binance = BinanceSource(
-                settings.instrument, PublicHTTP(DownloadBudget(1_000_000, 64 * 1048576))
+                settings.instrument, PublicHTTP(DownloadBudget(1_000_000, 64 * 1048576), timeout=2)
             )
             registry.register(binance, settings.instrument, settings.source.symbol)
             clock_sync = binance.server_time

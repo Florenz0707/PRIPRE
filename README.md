@@ -178,6 +178,6 @@ uv run --locked python -m pripre.cli backtest --config config/config.toml
 
 Linux 下使用 `CLOCK_MONOTONIC_RAW` 外推 Binance UTC，并用相同的原始时钟测量校时 RTT、计算耗时及更新周期，避免宿主机 NTP 调速使行情被误判为过期。其他平台回退到普通单调时钟，并继续执行复校与失效保护。
 
-`[runtime].clock_sync_seconds` 默认为 30，`clock_max_age_seconds` 默认为 90，后者必须大于前者。每轮最多三次公共时间请求，每次等待最多 3 秒，选择 RTT 不超过 2 秒的最低延迟样本。短暂复校失败保留尚未过期的校准；超过有效期暂停概率、清空特征缓冲，恢复后重新预热。超过 500 ms 的时间修正也会重新预热，并丢弃修正前尚未完成或排队的预测。
+`[runtime].clock_sync_seconds` 默认为 30，`clock_max_age_seconds` 默认为 90，后者必须大于前者。每轮最多三次公共时间请求，底层 HTTP 超时为 2 秒、每次异步等待最多 3 秒，避免已取消的阻塞读取长期占用校时请求锁；选择 RTT 不超过 2 秒的最低延迟样本。短暂复校失败保留尚未过期的校准；超过有效期暂停概率、清空特征缓冲，恢复后重新预热。超过 500 ms 的时间修正也会重新预热，并丢弃修正前尚未完成或排队的预测。
 
 快照包含 `elapsed_clock`、`clock_sync_age_ms`、`clock_syncs`、`clock_sync_failures`、`clock_adjustment_us`、`clock_epoch` 供诊断。WebSocket 使用 `stream_id`、`frame_sequence`、`frame_elapsed_us` 及服务端计算的 `frame_age_ms` 判断推送进度与排队时长；前端不再把 UTC 与浏览器时钟长期固定对齐。重复帧不刷新时效，断推送、突发传输延迟或排队超过约 3.5 秒仍会清除矩阵并重新订阅。渐进网络延迟与首次连接前的网络缓存无法仅靠两端独立时钟精确测量，此检查不是端到端绝对延迟证明。

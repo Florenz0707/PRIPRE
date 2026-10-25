@@ -100,3 +100,25 @@ def test_sample_schedule_is_deterministic_and_stays_inside_day() -> None:
         ("daily", date(2026, 2, 1), date(2026, 2, 2)),
         ("daily", date(2026, 2, 2), date(2026, 2, 3)),
     ]
+
+
+def test_clock_http_timeout_bounds_the_underlying_blocking_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from typing import NoReturn
+    from urllib.request import Request
+
+    from pripre.data.http import DownloadError
+
+    timeouts: list[float] = []
+
+    def timeout_read(_request: Request, *, timeout: float) -> NoReturn:
+        timeouts.append(timeout)
+        raise TimeoutError("simulated unavailable clock endpoint")
+
+    monkeypatch.setattr("urllib.request.urlopen", timeout_read)
+    reader = PublicHTTP(DownloadBudget(2, 1024), min_interval=0, timeout=2)
+    for _ in range(2):
+        with pytest.raises(DownloadError):
+            reader.get("https://example.invalid/time")
+    assert timeouts == [2, 2] and reader.budget.requests == 2

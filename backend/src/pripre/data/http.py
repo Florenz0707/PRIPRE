@@ -24,7 +24,12 @@ class DownloadBudget:
 
 
 class PublicHTTP:
-    def __init__(self, budget: DownloadBudget, min_interval: float = 0.15) -> None:
+    def __init__(
+        self, budget: DownloadBudget, min_interval: float = 0.15, timeout: float = 20
+    ) -> None:
+        if timeout <= 0:
+            raise ValueError("HTTP timeout must be positive")
+        self._timeout = timeout
         self.budget = budget
         self._lock = threading.Lock()
         self._last_request = 0.0
@@ -44,7 +49,7 @@ class PublicHTTP:
                 url, headers={"User-Agent": "PRIPRE/0.1", "X-MBX-TIME-UNIT": "MICROSECOND"}
             )
             try:
-                with urllib.request.urlopen(request, timeout=20) as response:
+                with urllib.request.urlopen(request, timeout=self._timeout) as response:
                     remaining = self.budget.max_bytes - self.budget.downloaded_bytes
                     declared = response.headers.get("Content-Length")
                     if declared is not None and int(declared) > remaining:
