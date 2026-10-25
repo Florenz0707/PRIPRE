@@ -156,7 +156,9 @@ describe('historical replay', () => {
     expect(wrapper.text()).toContain('参考价 12345')
     const charts = wrapper.findAllComponents({ name: 'Chart' })
     expect(charts).toHaveLength(2)
-    expect(charts[0]!.props('option').series[0].data).toEqual([[0, 0, 0.3]])
+    expect(charts[0]!.props('option').series[0].data).toEqual([
+      [0, 0, 0.3, Math.sqrt(0.3)],
+    ])
     expect(charts[1]!.props('option').series[0].data).toEqual([[0, 0, 1]])
     await wrapper.setProps({ model: 'slow' })
     await wrapper.setProps({ model: 'latest' })

@@ -4,6 +4,13 @@ import type { EChartsOption } from 'echarts'
 import type { ReplayPage, ReplayDetail } from './api'
 import { useRemoteJSON } from './useRemoteJSON'
 import Chart from './Chart.vue'
+import {
+  heatmapTooltip,
+  labelVisualMap,
+  probabilityHeatmapData,
+  probabilityVisualMap,
+} from './heatmap'
+import ProbabilityLegend from './ProbabilityLegend.vue'
 
 const props = defineProps<{
   start: string
@@ -47,8 +54,8 @@ function heatmap(labels: boolean): EChartsOption {
   const matrix = labels ? current.labels : current.probabilities
   return {
     animation: false,
-    tooltip: { position: 'top' },
-    grid: { left: 125, right: 10, top: 20, bottom: 90 },
+    tooltip: heatmapTooltip(current.grid, labels),
+    grid: { left: 135, right: 20, top: 20, bottom: 45 },
     xAxis: {
       type: 'category',
       data: current.grid.windows.map(
@@ -59,20 +66,16 @@ function heatmap(labels: boolean): EChartsOption {
       type: 'category',
       data: current.grid.prices.map((p) => `[${p.lower}, ${p.upper})`),
     },
-    visualMap: {
-      min: 0,
-      max: 1,
-      orient: 'horizontal',
-      left: 'center',
-      bottom: 10,
-      inRange: { color: ['#f2f6f4', '#b5d8c8', '#388f72', '#115344'] },
-    },
+    visualMap: labels ? labelVisualMap() : probabilityVisualMap(),
     series: [
       {
         type: 'heatmap',
-        data: matrix.flatMap((row, y) =>
-          row.map((v, x) => [x, y, v]).filter((v) => v[2] !== null),
-        ),
+        data: labels
+          ? matrix.flatMap((row, y) =>
+              row.map((v, x) => [x, y, v]).filter((v) => v[2] !== null),
+            )
+          : probabilityHeatmapData(current.probabilities),
+        emphasis: { itemStyle: { borderColor: '#ffffff', borderWidth: 2 } },
       },
     ],
   }
@@ -142,10 +145,14 @@ const bins = computed(() => {
         参考价 {{ frame.grid.reference_price }} · 模型 {{ frame.model }} ·
         {{ frame.status === 'ready' ? '有效预测' : '超分布：实时会暂停发布' }}
       </p>
+      <p class="notice">
+        预测概率使用与实时矩阵一致的连续红色色阶；色深按概率平方根映射，增强低概率细节，图例显示真实百分比。
+      </p>
       <div class="chart-grid">
         <div class="matrix-scroll">
           <h4>预测触达概率</h4>
           <Chart :option="probabilities" label="历史冻结预测概率矩阵" />
+          <ProbabilityLegend />
         </div>
         <div class="matrix-scroll">
           <h4>实际触达标签</h4>

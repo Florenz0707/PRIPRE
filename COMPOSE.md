@@ -159,7 +159,7 @@ docker compose -f compose.yaml -f deploy/compose.proxy-host.yaml exec backend /a
 
 本次为 `pripre-dev` 配置了隔离 worktree 中的私有文件 `.env.pripre-dev`（权限 0600，Git 与镜像构建均忽略），目标为 `http://host.docker.internal:7077`。原出口封禁及第一次切换的高延迟均未通过验收；第二次切换后 HTTP/WebSocket 双链路成功，隔离实时运行 135 秒完成 5 次校时且无失败，已使用验证镜像恢复 8020 实例并启用该代理。
 
-本次持续运行验收仍有暂停，功能分支暂未合并 `idle`。后续需从隔离 worktree 切换到已提交的 `feat/source-proxy` 操作此实例，结束后再切回 `idle`：
+代理功能已由用户合并到 `idle`；原验收中的暂停记录仍保留。后续从隔离 worktree 的最新 `idle` 操作此实例：
 
 ```bash
 # 不下载历史数据，只检查一次 HTTP 和一次 WebSocket
@@ -169,3 +169,14 @@ docker compose --env-file .env.pripre-dev -p pripre-dev up -d --no-build --wait
 ```
 
 原实例镜像保留为 `pripre-dev-backend:before-proxy-20261025` 和 `pripre-dev-frontend:before-proxy-20261025`。部署后 100 秒观察有一次校时超时，下一轮恢复，未进入校时失效；另有一次成交过期采样，随后恢复。零失败、持续零暂停诊断未通过。代理启用不代表长期零暂停；节点延迟过高时仍会正常触发校时失效保护。主目录 `dev` 未自动合并，避免从旧代码重建覆盖当前镜像。
+
+## 概率色阶前端更新
+
+色阶更新只需构建、重新创建前端，不需要重启后端或重新训练。当前 `pripre-dev` 实例使用私有 `.env.pripre-dev`，入口仍为 `http://127.0.0.1:8020`：
+
+```bash
+docker compose --env-file .env.pripre-dev -p pripre-dev build frontend
+docker compose --env-file .env.pripre-dev -p pripre-dev up -d --no-deps --no-build --wait frontend
+```
+
+浏览器刷新后加载新静态资源；若仍显示旧绿色或紫蓝渐变，使用强制刷新。首次色阶更新前的镜像保留为 `pripre-dev-frontend:before-heatmap-20261025`；红色连续渐变更新前的多色版本保留为 `pripre-dev-frontend:before-redscale-20261025`。此项验收包括冻结真实概率的前后配色对比、实时/历史热力图、百分比悬停及窄屏滚动，不重新宣称模型准确性或行情长期零暂停。

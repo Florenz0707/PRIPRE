@@ -5,6 +5,12 @@ import { fetchHealth, getJSON, type ResearchReport, type Settings } from './api'
 import { createLiveConnection } from './live'
 import Chart from './Chart.vue'
 import ResearchPanel from './ResearchPanel.vue'
+import {
+  heatmapTooltip,
+  probabilityHeatmapData,
+  probabilityVisualMap,
+} from './heatmap'
+import ProbabilityLegend from './ProbabilityLegend.vue'
 
 const health = ref('正在连接后端…')
 const settings = ref<Settings | null>(null)
@@ -42,8 +48,8 @@ const matrixOption = computed<EChartsOption>(() => {
   const grid = current.grid
   return {
     animation: false,
-    tooltip: { position: 'top' },
-    grid: { left: 135, right: 20, top: 15, bottom: 90 },
+    tooltip: heatmapTooltip(grid),
+    grid: { left: 135, right: 20, top: 15, bottom: 45 },
     xAxis: {
       type: 'category',
       data: grid.windows.map(
@@ -61,23 +67,12 @@ const matrixOption = computed<EChartsOption>(() => {
       ),
       splitArea: { show: true },
     },
-    visualMap: {
-      min: 0,
-      max: 1,
-      calculable: true,
-      orient: 'horizontal',
-      left: 'center',
-      bottom: 10,
-      text: ['100%', '0%'],
-      inRange: { color: ['#f2f6f4', '#b5d8c8', '#388f72', '#115344'] },
-    },
+    visualMap: probabilityVisualMap(),
     series: [
       {
         type: 'heatmap',
-        data: current.probabilities.flatMap((row, y) =>
-          row.map((p, x) => [x, y, Number(p.toFixed(4))]),
-        ),
-        emphasis: { itemStyle: { borderColor: '#173f35', borderWidth: 1 } },
+        data: probabilityHeatmapData(current.probabilities),
+        emphasis: { itemStyle: { borderColor: '#ffffff', borderWidth: 2 } },
       },
     ],
   }
@@ -185,8 +180,10 @@ onBeforeUnmount(live.stop)
             :option="matrixOption"
             label="价格区间与未来时间窗口的触达概率热力图"
           />
+          <ProbabilityLegend />
         </div>
         <p class="notice">
+          连续红色色阶：浅红为低概率，深红为高概率。色深按概率平方根映射，增强低概率细节；图例与悬停均显示真实百分比。
           颜色表示窗口内至少一笔成交触达的概率。区间与时间窗左闭右开，各格概率之和不必为
           100%。
         </p></template
