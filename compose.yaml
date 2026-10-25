@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: deploy/backend.Dockerfile
     environment:
-      PRIPRE_CONFIG: /app/config/default.toml
+      PRIPRE_CONFIG: /app/config/config.toml
       PRIPRE_LIVE_ENABLED: '${PRIPRE_LIVE_ENABLED:-false}'
     user: '${PRIPRE_UID:-1000}:${PRIPRE_GID:-1000}'
     volumes:

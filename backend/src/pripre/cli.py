@@ -13,7 +13,7 @@ from pripre.data.history import collect_history, dataset_summary
 def main() -> None:
     parser = argparse.ArgumentParser(prog="pripre")
     parser.add_argument("command", choices=["collect", "inspect", "backtest", "experiments"])
-    parser.add_argument("--config", type=Path, default=Path("config/default.toml"))
+    parser.add_argument("--config", type=Path, default=Path("config/config.toml"))
     args = parser.parse_args()
     config = load_config(args.config)
     commands = {

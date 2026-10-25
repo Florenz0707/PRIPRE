@@ -33,7 +33,7 @@ pre-commit install
 ```bash
 # 后端：http://127.0.0.1:8000，接口文档：http://127.0.0.1:8000/docs
 # 先完成下方 collect；显式启用真实行情
-PRIPRE_CONFIG=config/default.toml PRIPRE_LIVE_ENABLED=true uv run --locked uvicorn pripre.api:app --reload --host 127.0.0.1 --port 8000
+PRIPRE_CONFIG=config/config.toml PRIPRE_LIVE_ENABLED=true uv run --locked uvicorn pripre.api:app --reload --host 127.0.0.1 --port 8000
 ```
 
 ```bash
@@ -87,7 +87,7 @@ compose.yaml       部署入口
 
 ## 阶段 1：事件与扩展接口
 
-`config/default.toml` 提供 BTC/Binance、价格网格、历史范围、下载预算及最多 50 个客户端的默认配置。Python 调用 `load_config(path)` 加载并校验，未知键和无效组合会报错。
+`config/config.toml` 提供 BTC/Binance、价格网格、历史范围、下载预算及最多 50 个客户端的默认配置。Python 调用 `load_config(path)` 加载并校验，未知键和无效组合会报错。
 
 品种通过 `Instrument` 描述，来源通过 `MarketSource` 接口与 `SourceRegistry` 注册；新适配器无需修改网格与标签模块。报价源必须显式声明能力，不能替代成交证据。
 
@@ -98,8 +98,8 @@ compose.yaml       部署入口
 Binance 适配器支持聚合成交历史分页及 WebSocket 实时成交。历史下载是显式操作，测试和普通服务启动不会自动下载历史数据：
 
 ```bash
-uv run --locked python -m pripre.cli collect --config config/default.toml
-uv run --locked python -m pripre.cli inspect --config config/default.toml
+uv run --locked python -m pripre.cli collect --config config/config.toml
+uv run --locked python -m pripre.cli inspect --config config/config.toml
 ```
 
 采集范围为 2026-01-01 至执行日（UTC）：完整月份下载分钟归档并核对官方 SHA-256，未完成月份按日采集，当天只保存已关闭分钟；每日按预先固定的轮换时段采集 420 秒聚合成交样本。聚合成交保留成交价格和时间，可生成触达标签；分钟数据只用于全范围行情状态分析。
@@ -109,7 +109,7 @@ uv run --locked python -m pripre.cli inspect --config config/default.toml
 ## 阶段 3：基准研究与回测
 
 ```bash
-uv run --locked python -m pripre.cli backtest --config config/default.toml
+uv run --locked python -m pripre.cli backtest --config config/config.toml
 ```
 
 至少需要 10 个不同日期的成交样本。每个样本使用过去 60 秒计算状态，之后默认每 60 秒生成预测起点（可配置为每秒），保留完整未来观测窗口。基准模型抽取训练期真实成交路径，将相对价格变化映射到当前价格，按实际模拟成交判断触达，不填补跳空。
@@ -161,7 +161,7 @@ uv run --locked python -m pripre.cli backtest --config config/default.toml
 
 - `GET /api/research?start=2026-02-01&end=2026-02-28`：仅重算已保存样本外预测的指标，不重训；分组包含样本量、日期数、未知比例及按日分块 95% 区间。日期没有样本时返回空指标，不沿用全周期结果。
 - `GET /api/replay?start=...&end=...&offset=0&limit=100`：分页列出历史预测；`GET /api/replay/<timestamp_us>?model=conditional-calibrated`：取得固定网格、概率及真实触达标签。
-- `uv run --locked python -m pripre.cli experiments --config config/default.toml`：在前 60% 日期训练、中间 20% 日期抽取最多 20 个按时间均匀间隔的开发起点，比较路径数、种子、候选比例、稀疏回退、价格映射、路径长度及路径库采样粒度。最后 20% 日期不参与该实验，不据此自动切换实时模型。
+- `uv run --locked python -m pripre.cli experiments --config config/config.toml`：在前 60% 日期训练、中间 20% 日期抽取最多 20 个按时间均匀间隔的开发起点，比较路径数、种子、候选比例、稀疏回退、价格映射、路径长度及路径库采样粒度。最后 20% 日期不参与该实验，不据此自动切换实时模型。
 - `GET /api/experiments`：读取开发实验结果。不同预测长度对应不同目标，不能直接按 Brier 排名。
 
 新增历史频率基准使用训练期波动四分位阈值划分三种状态，状态少于 16 个起点时合并回全体训练样本；没有标签证据的格子报错。原无条件路径基准继续保留。

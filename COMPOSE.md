@@ -73,8 +73,8 @@ Linux 容器访问宿主机 PostgreSQL 时，可在实际需要的服务中配�
 可在宿主机按 README 采集，也可使用构建后的镜像：
 
 ```bash
-docker compose run --rm backend /app/.venv/bin/python -m pripre.cli collect --config config/default.toml
-docker compose run --rm backend /app/.venv/bin/python -m pripre.cli backtest --config config/default.toml
+docker compose run --rm backend /app/.venv/bin/python -m pripre.cli collect --config config/config.toml
+docker compose run --rm backend /app/.venv/bin/python -m pripre.cli backtest --config config/config.toml
 ```
 
 完成本地数据准备后，将 `.env` 中 `PRIPRE_LIVE_ENABLED` 改为 `true`，执行 `docker compose up -d --wait`。模型从当前本地样本训练；新增样本后重启后端以重建模型。WebSocket 使用同一入口 `/api/stream`，无需另开端口。

@@ -82,9 +82,9 @@ dbb4c4561a0b6e8776f928f4b9aa3fdda9480aff2165f4600fe73a550d086350
 ```bash
 uv sync --locked
 pnpm install --frozen-lockfile
-uv run --locked python -m pripre.cli collect --config config/default.toml
-uv run --locked python -m pripre.cli inspect --config config/default.toml
-uv run --locked python -m pripre.cli backtest --config config/default.toml
+uv run --locked python -m pripre.cli collect --config config/config.toml
+uv run --locked python -m pripre.cli inspect --config config/config.toml
+uv run --locked python -m pripre.cli backtest --config config/config.toml
 uv run --locked python scripts/check.py
 ```
 
