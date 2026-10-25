@@ -179,4 +179,4 @@ docker compose --env-file .env.pripre-dev -p pripre-dev build frontend
 docker compose --env-file .env.pripre-dev -p pripre-dev up -d --no-deps --no-build --wait frontend
 ```
 
-浏览器刷新后加载新静态资源；若仍显示旧绿色渐变，使用强制刷新。更新前的前端镜像保留为 `pripre-dev-frontend:before-heatmap-20261025`。此项验收包括冻结真实概率的前后配色对比、实时/历史热力图、百分比悬停及窄屏滚动，不重新宣称模型准确性或行情长期零暂停。
+浏览器刷新后加载新静态资源；若仍显示旧绿色或紫蓝渐变，使用强制刷新。首次色阶更新前的镜像保留为 `pripre-dev-frontend:before-heatmap-20261025`；红色连续渐变更新前的多色版本保留为 `pripre-dev-frontend:before-redscale-20261025`。此项验收包括冻结真实概率的前后配色对比、实时/历史热力图、百分比悬停及窄屏滚动，不重新宣称模型准确性或行情长期零暂停。

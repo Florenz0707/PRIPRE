@@ -1,34 +1,41 @@
 import type {
   PiecewiseVisualMapComponentOption,
+  ContinuousVisualMapComponentOption,
   TooltipComponentOption,
 } from 'echarts'
 import type { Grid } from './api'
 
-// Fixed, non-uniform probability bands; colors sampled from Viridis in order.
-// The values stay on their original 0–1 scale, including at band boundaries.
-export function probabilityVisualMap(): PiecewiseVisualMapComponentOption {
+// A fixed square-root color scale gives low probabilities more visual resolution.
+// Keep the original probability in dimension 2 for tooltips and auditability.
+const reds = [
+  '#fff5f0',
+  '#fee0d2',
+  '#fcbba1',
+  '#fc9272',
+  '#fb6a4a',
+  '#ef3b2c',
+  '#cb181d',
+  '#a50f15',
+  '#67000d',
+]
+export const probabilityGradient = `linear-gradient(to right, ${reds.join(', ')})`
+export const probabilityTicks = [0, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 1].map(
+  (p) => ({ label: `${p * 100}%`, position: `${Math.sqrt(p) * 100}%` }),
+)
+
+export function probabilityHeatmapData(matrix: number[][]): number[][] {
+  return matrix.flatMap((row, y) => row.map((p, x) => [x, y, p, Math.sqrt(p)]))
+}
+
+export function probabilityVisualMap(): ContinuousVisualMapComponentOption {
   return {
-    type: 'piecewise',
-    dimension: 2,
-    orient: 'horizontal',
-    left: 'center',
-    bottom: 8,
-    selectedMode: false,
-    hoverLink: false,
-    itemWidth: 18,
-    itemHeight: 12,
-    itemGap: 12,
-    textStyle: { color: '#172e38', fontSize: 11 },
-    pieces: [
-      { gte: 0, lt: 0.01, label: '0–<1%', color: '#440154' },
-      { gte: 0.01, lt: 0.05, label: '1–<5%', color: '#46327e' },
-      { gte: 0.05, lt: 0.1, label: '5–<10%', color: '#365c8d' },
-      { gte: 0.1, lt: 0.25, label: '10–<25%', color: '#277f8e' },
-      { gte: 0.25, lt: 0.5, label: '25–<50%', color: '#1fa187' },
-      { gte: 0.5, lt: 0.75, label: '50–<75%', color: '#4ac16d' },
-      { gte: 0.75, lt: 0.9, label: '75–<90%', color: '#a0da39' },
-      { gte: 0.9, lte: 1, label: '90–100%', color: '#fde725' },
-    ],
+    type: 'continuous',
+    min: 0,
+    max: 1,
+    dimension: 3,
+    show: false,
+    calculable: false,
+    inRange: { color: [...reds] },
   }
 }
 
@@ -43,8 +50,8 @@ export function labelVisualMap(): PiecewiseVisualMapComponentOption {
     hoverLink: false,
     textStyle: { color: '#172e38' },
     pieces: [
-      { value: 0, label: '0 · 未触达', color: '#dce3eb' },
-      { value: 1, label: '1 · 已触达', color: '#176858' },
+      { value: 0, label: '0 · 未触达', color: '#fee2e2' },
+      { value: 1, label: '1 · 已触达', color: '#991b1b' },
     ],
   }
 }

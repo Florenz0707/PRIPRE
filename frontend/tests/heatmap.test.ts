@@ -1,10 +1,15 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import { init, use } from 'echarts/core'
+import { color } from 'echarts'
 import { HeatmapChart } from 'echarts/charts'
 import { GridComponent, VisualMapComponent } from 'echarts/components'
 import { SVGRenderer } from 'echarts/renderers'
-import { heatmapTooltip, probabilityVisualMap } from '../src/heatmap'
+import {
+  heatmapTooltip,
+  probabilityHeatmapData,
+  probabilityVisualMap,
+} from '../src/heatmap'
 
 use([HeatmapChart, GridComponent, VisualMapComponent, SVGRenderer])
 
@@ -21,24 +26,35 @@ function colors(values: number[]) {
       xAxis: { type: 'category', data: values.map((_, i) => String(i)) },
       yAxis: { type: 'category', data: ['price'] },
       visualMap: probabilityVisualMap(),
-      series: [{ type: 'heatmap', data: values.map((p, x) => [x, 0, p]) }],
+      series: [{ type: 'heatmap', data: probabilityHeatmapData([values]) }],
     })
-    return values.map((_, dataIndex) =>
-      chart.getVisual({ seriesIndex: 0, dataIndex }, 'color'),
-    )
+    return values.map((_, dataIndex) => {
+      const shade = chart.getVisual({ seriesIndex: 0, dataIndex }, 'color')
+      if (typeof shade !== 'string') throw new Error('expected a solid color')
+      return shade
+    })
   } finally {
     chart.dispose()
   }
 }
 
 describe('fixed probability color encoding', () => {
-  it('covers every boundary including zero and one, with eight ordered bands', () => {
-    const edges = [0, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 1]
-    const lower = colors(edges.slice(0, -1))
-    const upper = colors(edges.slice(1).map((p) => p - 1e-8))
-    expect(lower).toEqual(upper)
-    expect(new Set(lower).size).toBe(8)
-    expect(colors([1])[0]).toBe(lower.at(-1))
+  it('provides continuous red shades with increasing darkness instead of eight flat bands', () => {
+    const shades = colors(Array.from({ length: 101 }, (_, i) => i / 100))
+    expect(new Set(shades).size).toBe(101)
+    const brightness = shades.map((shade) => {
+      const rgb = color.parse(shade)
+      if (!rgb) throw new Error('invalid rendered color')
+      expect(rgb[0]).toBeGreaterThanOrEqual(rgb[1]!)
+      expect(rgb[0]).toBeGreaterThanOrEqual(rgb[2]!)
+      return rgb[0]! * 0.2126 + rgb[1]! * 0.7152 + rgb[2]! * 0.0722
+    })
+    for (let i = 1; i < brightness.length; i++)
+      expect(brightness[i]).toBeLessThan(brightness[i - 1]!)
+    expect(new Set(colors([0.002, 0.003, 0.004, 0.005])).size).toBe(4)
+    expect(probabilityHeatmapData([[0.002014306698558258]])[0]![2]).toBe(
+      0.002014306698558258,
+    )
   })
 
   it('keeps the same absolute probability color when the frame range changes', () => {
@@ -46,7 +62,7 @@ describe('fixed probability color encoding', () => {
       colors([0.002, 0.04, 0.06]),
     )
     expect(new Set(colors([0.002, 0.04, 0.06])).size).toBe(3)
-    expect(probabilityVisualMap().selectedMode).toBe(false)
+    expect(probabilityVisualMap().calculable).toBe(false)
   })
 
   it('shows probability percentages and the complete half-open price and time ranges', () => {

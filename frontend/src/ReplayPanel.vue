@@ -4,7 +4,13 @@ import type { EChartsOption } from 'echarts'
 import type { ReplayPage, ReplayDetail } from './api'
 import { useRemoteJSON } from './useRemoteJSON'
 import Chart from './Chart.vue'
-import { heatmapTooltip, labelVisualMap, probabilityVisualMap } from './heatmap'
+import {
+  heatmapTooltip,
+  labelVisualMap,
+  probabilityHeatmapData,
+  probabilityVisualMap,
+} from './heatmap'
+import ProbabilityLegend from './ProbabilityLegend.vue'
 
 const props = defineProps<{
   start: string
@@ -49,7 +55,7 @@ function heatmap(labels: boolean): EChartsOption {
   return {
     animation: false,
     tooltip: heatmapTooltip(current.grid, labels),
-    grid: { left: 125, right: 10, top: 20, bottom: 90 },
+    grid: { left: 135, right: 20, top: 20, bottom: 45 },
     xAxis: {
       type: 'category',
       data: current.grid.windows.map(
@@ -64,9 +70,11 @@ function heatmap(labels: boolean): EChartsOption {
     series: [
       {
         type: 'heatmap',
-        data: matrix.flatMap((row, y) =>
-          row.map((v, x) => [x, y, v]).filter((v) => v[2] !== null),
-        ),
+        data: labels
+          ? matrix.flatMap((row, y) =>
+              row.map((v, x) => [x, y, v]).filter((v) => v[2] !== null),
+            )
+          : probabilityHeatmapData(current.probabilities),
         emphasis: { itemStyle: { borderColor: '#ffffff', borderWidth: 2 } },
       },
     ],
@@ -138,12 +146,13 @@ const bins = computed(() => {
         {{ frame.status === 'ready' ? '有效预测' : '超分布：实时会暂停发布' }}
       </p>
       <p class="notice">
-        预测概率使用与实时矩阵一致的固定分段色阶；低概率区间细分，图例区间不等宽。
+        预测概率使用与实时矩阵一致的连续红色色阶；色深按概率平方根映射，增强低概率细节，图例显示真实百分比。
       </p>
       <div class="chart-grid">
         <div class="matrix-scroll">
           <h4>预测触达概率</h4>
           <Chart :option="probabilities" label="历史冻结预测概率矩阵" />
+          <ProbabilityLegend />
         </div>
         <div class="matrix-scroll">
           <h4>实际触达标签</h4>
