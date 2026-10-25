@@ -157,11 +157,15 @@ docker compose -f compose.yaml -f deploy/compose.proxy-host.yaml exec backend /a
 
 原生 Docker Engine 若运行在 WSL，而代理运行在 Windows，`host-gateway` 只代表 Docker Engine 所在宿主网络，不保证对应 Windows。应填写并验证容器实际可达的 Windows 地址，不能套用 Docker Desktop 的拓扑。
 
-本次为 `pripre-dev` 准备了隔离 worktree 中的私有配置 `.env.pripre-dev`（权限 0600，Git 与镜像构建均忽略），目标为 `http://host.docker.internal:7077`。目前真实 REST 检查仍返回 418，因此尚未将此配置用于 8020 运行实例。出口可用后，先在代理功能分支的工作目录用以下命令验证，再执行部署：
+本次为 `pripre-dev` 配置了隔离 worktree 中的私有文件 `.env.pripre-dev`（权限 0600，Git 与镜像构建均忽略），目标为 `http://host.docker.internal:7077`。原出口封禁及第一次切换的高延迟均未通过验收；第二次切换后 HTTP/WebSocket 双链路成功，隔离实时运行 135 秒完成 5 次校时且无失败，已使用验证镜像恢复 8020 实例并启用该代理。
+
+后续从隔离 worktree 的最新 `idle` 操作此实例：
 
 ```bash
-# 不启动依赖服务，不下载历史数据，只检查一次 HTTP 和一次 WebSocket
-docker compose --env-file .env.pripre-dev -p pripre-proxy-acceptance run --rm --no-deps backend /app/.venv/bin/python -m pripre.cli source-check --config config/config.toml
-# 确认 http_ok 与 websocket_ok 都为 true 后，再更新现有实例
-docker compose --env-file .env.pripre-dev -p pripre-dev up -d --build --wait
+# 不下载历史数据，只检查一次 HTTP 和一次 WebSocket
+docker compose --env-file .env.pripre-dev -p pripre-dev exec -T backend /app/.venv/bin/python -m pripre.cli source-check --config config/config.toml
+# 修改私有环境文件后重新创建；确认本地镜像版本再使用 --no-build
+docker compose --env-file .env.pripre-dev -p pripre-dev up -d --no-build --wait
 ```
+
+原实例镜像保留为 `pripre-dev-backend:before-proxy-20261025` 和 `pripre-dev-frontend:before-proxy-20261025`。代理启用不代表长期零暂停；节点延迟过高时仍会正常触发校时失效保护。主目录 `dev` 未自动合并，避免从旧代码重建覆盖当前镜像。

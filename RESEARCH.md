@@ -157,7 +157,8 @@ uv run --locked python scripts/check.py
 
 - 自动检查：69 个后端测试、14 个前端测试、生产构建、全部 pre-commit 与 Compose 配置校验通过；测试仅使用本地 HTTP/CONNECT/WebSocket 服务器，不访问外部行情。覆盖认证、显式代理与 NO_PROXY 隔离、直连隔离、错误凭据隐藏、失败不直连及 Retry-After 冷却。
 - 容器检查：前后端镜像构建及安装包一致性验证通过；独立 `pripre-proxy-acceptance` 的首页、健康、配置、矩阵接口均返回 200。代理标志为 true，实时关闭时矩阵保持 disabled；未使用 host 网络，也未向前端注入代理或覆盖 Desktop 宿主机 DNS。
-- 实际源检查：通过用户确认的 7077 代理读取一次真实 WebSocket 成交成功；REST 时间接口返回 418/-1003，响应表明出口 IP 被封禁，最新 `Retry-After` 为 1711 秒。诊断命令返回失败并退出 1，未绕过代理；不能将代理 TCP 可达、WebSocket 成功或健康检查成功称为完整行情验收通过。
-- 当前未切换 8020 运行实例的代理；等待用户确认更换可访问 Binance 的出口后再复测。临时验收容器在检查后停止，未下载或覆盖历史数据，现有运行配置和主目录 dev 保留。
+- 实际源检查：原出口返回 REST 418/-1003，遵守 Retry-After 后第一次切换节点仍有约 6 秒 REST 延迟，105.51 秒隔离观察出现 3 次复校失败及校时失效。第二次切换后 `source-check` 的 HTTP 与 WebSocket 均成功（一次 HTTP、31 字节及一条真实成交）；没有绕过代理。
+- 实时复核：第二个新出口在独立数据目录观察 135.37 秒，共 131 帧（预热 56、有效预测 75），成功校时计数由 1 增至 5，失败、缺口、重连均为 0，结束时 ready。保留 RTT 不超过 2 秒与校准有效期 90 秒的保护，没有放宽门槛。该短窗口不能证明长期零暂停。
+- 部署：使用已验证镜像更新 `pripre-dev` 的 8020 实例，代理为 `http://host.docker.internal:7077`；仍沿用 `/home/florenz/PRIPRE/data`。旧镜像保留为 `pripre-dev-backend:before-proxy-20261025` 与 `pripre-dev-frontend:before-proxy-20261025`。临时验收容器停止，未下载或覆盖历史数据，主目录 dev 保留。
 
 检查结果位于本地 `data/diagnostics/source-proxy-20261025/`。这项工作不改变概率算法、历史研究数据或校准结论。
