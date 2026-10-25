@@ -108,3 +108,5 @@ docker compose -p pripre down
 前后端应一起更新镜像，让前端使用新增的帧进度字段。宿主机时钟和 NTP 配置不需要由本项目修改。升级后检查 `/api/matrix` 中 `elapsed_clock` 为 `monotonic_raw`、`clock_syncs` 持续增加、`clock_sync_age_ms` 周期回落；超过校准有效期时应显示校时失效而不是有效概率。
 
 本次修复在隔离 worktree 的 `idle` 集成，主目录 `dev` 按协作约束不自动合并。运行实例若由该 worktree 的验证镜像更新，之后从 `dev` 执行 `--build` 前，应先按分支流程合入修复，防止重新构建旧代码。保留当前本地配置、数据目录及 `.env`；新增校时参数可省略以采用默认值。
+
+2026-10-25 的时钟修复已更新至当前 `pripre-dev` 实例（`127.0.0.1:8020`），沿用 `/home/florenz/PRIPRE/data`。运行配置从原容器保留，新增参数使用后端默认值；主目录 `dev` 未自动合并。旧镜像保留为 `pripre-clockfix-backend:before-20261025` 和 `pripre-clockfix-frontend:before-20261025`。已打开的页面须刷新以加载新前端；仅后端更新不足以修复旧页面中的固定 UTC 锚点逻辑。
