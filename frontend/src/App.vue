@@ -5,6 +5,7 @@ import { fetchHealth, getJSON, type ResearchReport, type Settings } from './api'
 import { createLiveConnection } from './live'
 import Chart from './Chart.vue'
 import ResearchPanel from './ResearchPanel.vue'
+import { heatmapTooltip, probabilityVisualMap } from './heatmap'
 
 const health = ref('正在连接后端…')
 const settings = ref<Settings | null>(null)
@@ -42,7 +43,7 @@ const matrixOption = computed<EChartsOption>(() => {
   const grid = current.grid
   return {
     animation: false,
-    tooltip: { position: 'top' },
+    tooltip: heatmapTooltip(grid),
     grid: { left: 135, right: 20, top: 15, bottom: 90 },
     xAxis: {
       type: 'category',
@@ -61,23 +62,14 @@ const matrixOption = computed<EChartsOption>(() => {
       ),
       splitArea: { show: true },
     },
-    visualMap: {
-      min: 0,
-      max: 1,
-      calculable: true,
-      orient: 'horizontal',
-      left: 'center',
-      bottom: 10,
-      text: ['100%', '0%'],
-      inRange: { color: ['#f2f6f4', '#b5d8c8', '#388f72', '#115344'] },
-    },
+    visualMap: probabilityVisualMap(),
     series: [
       {
         type: 'heatmap',
         data: current.probabilities.flatMap((row, y) =>
-          row.map((p, x) => [x, y, Number(p.toFixed(4))]),
+          row.map((p, x) => [x, y, p]),
         ),
-        emphasis: { itemStyle: { borderColor: '#173f35', borderWidth: 1 } },
+        emphasis: { itemStyle: { borderColor: '#ffffff', borderWidth: 2 } },
       },
     ],
   }
@@ -187,6 +179,7 @@ onBeforeUnmount(live.stop)
           />
         </div>
         <p class="notice">
+          固定分段色阶：紫色为低概率，黄色为高概率，低概率区间细分显示；图例区间不等宽，悬停可查看具体百分比。
           颜色表示窗口内至少一笔成交触达的概率。区间与时间窗左闭右开，各格概率之和不必为
           100%。
         </p></template

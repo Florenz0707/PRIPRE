@@ -4,6 +4,7 @@ import type { EChartsOption } from 'echarts'
 import type { ReplayPage, ReplayDetail } from './api'
 import { useRemoteJSON } from './useRemoteJSON'
 import Chart from './Chart.vue'
+import { heatmapTooltip, labelVisualMap, probabilityVisualMap } from './heatmap'
 
 const props = defineProps<{
   start: string
@@ -47,7 +48,7 @@ function heatmap(labels: boolean): EChartsOption {
   const matrix = labels ? current.labels : current.probabilities
   return {
     animation: false,
-    tooltip: { position: 'top' },
+    tooltip: heatmapTooltip(current.grid, labels),
     grid: { left: 125, right: 10, top: 20, bottom: 90 },
     xAxis: {
       type: 'category',
@@ -59,20 +60,14 @@ function heatmap(labels: boolean): EChartsOption {
       type: 'category',
       data: current.grid.prices.map((p) => `[${p.lower}, ${p.upper})`),
     },
-    visualMap: {
-      min: 0,
-      max: 1,
-      orient: 'horizontal',
-      left: 'center',
-      bottom: 10,
-      inRange: { color: ['#f2f6f4', '#b5d8c8', '#388f72', '#115344'] },
-    },
+    visualMap: labels ? labelVisualMap() : probabilityVisualMap(),
     series: [
       {
         type: 'heatmap',
         data: matrix.flatMap((row, y) =>
           row.map((v, x) => [x, y, v]).filter((v) => v[2] !== null),
         ),
+        emphasis: { itemStyle: { borderColor: '#ffffff', borderWidth: 2 } },
       },
     ],
   }
@@ -141,6 +136,9 @@ const bins = computed(() => {
       <p>
         参考价 {{ frame.grid.reference_price }} · 模型 {{ frame.model }} ·
         {{ frame.status === 'ready' ? '有效预测' : '超分布：实时会暂停发布' }}
+      </p>
+      <p class="notice">
+        预测概率使用与实时矩阵一致的固定分段色阶；低概率区间细分，图例区间不等宽。
       </p>
       <div class="chart-grid">
         <div class="matrix-scroll">
